@@ -1,3 +1,5 @@
+'use client';
+
 import { useAuth } from '../contexts/AuthContext';
 import { UserRole } from '../types/auth';
 import { useRouter } from 'next/navigation';

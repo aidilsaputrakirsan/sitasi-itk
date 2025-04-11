@@ -142,7 +142,7 @@ export default function Dashboard() {
 
       {loading ? (
         <div className="mt-6 flex justify-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-600"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
         </div>
       ) : (
         <div className="mt-6">
@@ -151,9 +151,9 @@ export default function Dashboard() {
             <div className="bg-white overflow-hidden shadow rounded-lg">
               <div className="px-4 py-5 sm:p-6">
                 <div className="flex items-center">
-                  <div className="flex-shrink-0 bg-primary-100 rounded-md p-3">
+                  <div className="flex-shrink-0 bg-blue-100 rounded-md p-3">
                     <svg
-                      className="h-6 w-6 text-primary-600"
+                      className="h-6 w-6 text-blue-600"
                       xmlns="http://www.w3.org/2000/svg"
                       fill="none"
                       viewBox="0 0 24 24"
@@ -185,7 +185,7 @@ export default function Dashboard() {
                 <div className="text-sm">
                   <a
                     href="/dashboard/pengajuan"
-                    className="font-medium text-primary-600 hover:text-primary-500"
+                    className="font-medium text-blue-600 hover:text-blue-500"
                   >
                     Lihat detail
                   </a>
@@ -197,9 +197,9 @@ export default function Dashboard() {
             <div className="bg-white overflow-hidden shadow rounded-lg">
               <div className="px-4 py-5 sm:p-6">
                 <div className="flex items-center">
-                  <div className="flex-shrink-0 bg-primary-100 rounded-md p-3">
+                  <div className="flex-shrink-0 bg-blue-100 rounded-md p-3">
                     <svg
-                      className="h-6 w-6 text-primary-600"
+                      className="h-6 w-6 text-blue-600"
                       xmlns="http://www.w3.org/2000/svg"
                       fill="none"
                       viewBox="0 0 24 24"
@@ -231,7 +231,7 @@ export default function Dashboard() {
                 <div className="text-sm">
                   <a
                     href="/dashboard/bimbingan"
-                    className="font-medium text-primary-600 hover:text-primary-500"
+                    className="font-medium text-blue-600 hover:text-blue-500"
                   >
                     Lihat detail
                   </a>
@@ -243,9 +243,9 @@ export default function Dashboard() {
             <div className="bg-white overflow-hidden shadow rounded-lg">
               <div className="px-4 py-5 sm:p-6">
                 <div className="flex items-center">
-                  <div className="flex-shrink-0 bg-primary-100 rounded-md p-3">
+                  <div className="flex-shrink-0 bg-blue-100 rounded-md p-3">
                     <svg
-                      className="h-6 w-6 text-primary-600"
+                      className="h-6 w-6 text-blue-600"
                       xmlns="http://www.w3.org/2000/svg"
                       fill="none"
                       viewBox="0 0 24 24"
@@ -277,7 +277,7 @@ export default function Dashboard() {
                 <div className="text-sm">
                   <a
                     href="/dashboard/sempro"
-                    className="font-medium text-primary-600 hover:text-primary-500"
+                    className="font-medium text-blue-600 hover:text-blue-500"
                   >
                     Lihat detail
                   </a>
@@ -289,9 +289,9 @@ export default function Dashboard() {
             <div className="bg-white overflow-hidden shadow rounded-lg">
               <div className="px-4 py-5 sm:p-6">
                 <div className="flex items-center">
-                  <div className="flex-shrink-0 bg-primary-100 rounded-md p-3">
+                  <div className="flex-shrink-0 bg-blue-100 rounded-md p-3">
                     <svg
-                      className="h-6 w-6 text-primary-600"
+                      className="h-6 w-6 text-blue-600"
                       xmlns="http://www.w3.org/2000/svg"
                       fill="none"
                       viewBox="0 0 24 24"
@@ -323,7 +323,7 @@ export default function Dashboard() {
                 <div className="text-sm">
                   <a
                     href="/dashboard/sidang"
-                    className="font-medium text-primary-600 hover:text-primary-500"
+                    className="font-medium text-blue-600 hover:text-blue-500"
                   >
                     Lihat detail
                   </a>
@@ -342,7 +342,7 @@ export default function Dashboard() {
                     <li key={notification.id}>
                       <div className="px-4 py-4 sm:px-6">
                         <div className="flex items-center justify-between">
-                          <p className="text-sm font-medium text-primary-600 truncate">
+                          <p className="text-sm font-medium text-blue-600 truncate">
                             {notification.judul}
                           </p>
                           <div className="ml-2 flex-shrink-0 flex">
@@ -387,7 +387,7 @@ export default function Dashboard() {
                 <div className="bg-gray-50 px-4 py-3 text-center text-sm">
                   <a
                     href="/dashboard/notifications"
-                    className="font-medium text-primary-600 hover:text-primary-500"
+                    className="font-medium text-blue-600 hover:text-blue-500"
                   >
                     Lihat semua notifikasi
                   </a>

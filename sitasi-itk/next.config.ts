@@ -5,9 +5,6 @@ const nextConfig: NextConfig = {
   images: {
     domains: ['localhost', 'https://hklujrxbbcpnpapmmihj.supabase.co'],
   },
-  experimental: {
-    serverExternalPackages: ['pdf-lib'],
-  },
 };
 
 export default nextConfig;

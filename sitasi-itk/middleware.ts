@@ -10,13 +10,25 @@ export async function middleware(req: NextRequest) {
     data: { session },
   } = await supabase.auth.getSession();
 
-  // If no session and trying to access protected routes, redirect to login
+  // Define auth routes and protected routes
   const isAuthRoute = req.nextUrl.pathname.startsWith('/login') || 
                      req.nextUrl.pathname.startsWith('/register') || 
                      req.nextUrl.pathname.startsWith('/forgot-password') || 
                      req.nextUrl.pathname.startsWith('/reset-password');
-                     
-  if (!session && req.nextUrl.pathname.startsWith('/dashboard')) {
+  
+  const isProtectedRoute = req.nextUrl.pathname.startsWith('/dashboard');
+  
+  // Root path handling
+  if (req.nextUrl.pathname === '/') {
+    if (session) {
+      return NextResponse.redirect(new URL('/dashboard', req.url));
+    } else {
+      return NextResponse.redirect(new URL('/login', req.url));
+    }
+  }
+
+  // If no session and trying to access protected routes, redirect to login
+  if (!session && isProtectedRoute) {
     const redirectUrl = new URL('/login', req.url);
     return NextResponse.redirect(redirectUrl);
   }
@@ -33,6 +45,7 @@ export async function middleware(req: NextRequest) {
 // Specify which routes this middleware should run on
 export const config = {
   matcher: [
+    '/',
     '/dashboard/:path*',
     '/login',
     '/register',
