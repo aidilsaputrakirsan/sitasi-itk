@@ -3,10 +3,10 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   images: {
-    domains: ['localhost', 'your-supabase-project.supabase.co'],
+    domains: ['localhost', 'https://hklujrxbbcpnpapmmihj.supabase.co'],
   },
   experimental: {
-    serverComponentsExternalPackages: ['pdf-lib'],
+    serverExternalPackages: ['pdf-lib'],
   },
 };
 
