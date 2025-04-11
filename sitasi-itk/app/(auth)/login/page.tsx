@@ -30,6 +30,7 @@ export default function LoginPage() {
     resolver: zodResolver(loginSchema),
   });
 
+  // Dalam fungsi onSubmit di file login/page.tsx
   const onSubmit = async (data: LoginFormValues) => {
     setIsSubmitting(true);
     setError(null);
@@ -40,16 +41,26 @@ export default function LoginPage() {
         password: data.password,
       };
 
+      console.log("Attempting login with:", data.email);
+
       const { error } = await login(credentials);
 
       if (error) {
+        console.error("Login error returned:", error);
         setError(error.message);
         setIsSubmitting(false);
         return;
       }
 
-      // Redirect to dashboard
-      router.push('/dashboard');
+      console.log("Login successful, redirecting to dashboard");
+      
+      // Force redirect to dashboard
+      window.location.href = '/dashboard';
+      
+      // Fallback if the above doesn't work
+      setTimeout(() => {
+        router.push('/dashboard');
+      }, 1000);
     } catch (err) {
       console.error('Login error:', err);
       setError('Terjadi kesalahan saat login');

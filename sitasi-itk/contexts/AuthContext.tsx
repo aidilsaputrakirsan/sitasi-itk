@@ -90,20 +90,70 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const { data: { user } } = await supabase.auth.getUser();
       
       if (!user) return null;
-
-      // Get the user profile data
-      const { data: profile, error } = await supabase
+  
+      console.log("Fetching profile for user ID:", user.id);
+  
+      // Coba ambil profil - cara alternatif yang lebih langsung
+      const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('*')
-        .eq('id', user.id)
+        .eq('id', user.id);
+      
+      // Periksa hasil kueri tanpa menggunakan .single()
+      if (profileError) {
+        console.error("Error in profile query:", profileError);
+      }
+      
+      console.log("Profile query result:", profileData);
+      
+      // Jika profil ditemukan - ambil yang pertama
+      if (profileData && profileData.length > 0) {
+        console.log("Found profile:", profileData[0]);
+        return profileData[0] as UserProfile;
+      }
+      
+      console.log("No profile found, attempting to create one");
+      
+      // Jika tidak ada profil, cek terlebih dahulu apakah sudah ada
+      const { data: existingProfiles, error: checkError } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('id', user.id);
+      
+      // Jika profil sudah ada, hindari membuat yang baru
+      if (existingProfiles && existingProfiles.length > 0) {
+        console.log("Profile exists but couldn't be retrieved properly");
+        return {
+          id: user.id,
+          name: user.user_metadata?.name || 'User',
+          roles: user.user_metadata?.role ? [user.user_metadata.role] : ['mahasiswa'],
+        } as UserProfile;
+      }
+      
+      // Buat profil baru jika benar-benar tidak ada
+      const userMetadata = user.user_metadata;
+      const role = userMetadata?.role || 'mahasiswa';
+      const roles = Array.isArray(role) ? role : [role];
+      
+      const { data: newProfile, error: insertError } = await supabase
+        .from('profiles')
+        .insert([
+          {
+            id: user.id,
+            name: userMetadata?.name || user.email?.split('@')[0] || 'User',
+            username: userMetadata?.username || null,
+            roles: roles
+          }
+        ])
+        .select('*')
         .single();
-
-      if (error) {
-        console.error('Error fetching profile:', error);
+        
+      if (insertError) {
+        console.error('Error creating profile:', insertError);
         return null;
       }
-
-      return profile as UserProfile;
+      
+      return newProfile as UserProfile;
     } catch (error) {
       console.error('Error in getProfile:', error);
       return null;
@@ -114,17 +164,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       setState({ ...state, isLoading: true, error: null });
       
+      // Tambahkan console log untuk debugging
+      console.log("Login attempt started for:", credentials.email);
+      
       const { data, error } = await supabase.auth.signInWithPassword({
         email: credentials.email,
         password: credentials.password,
       });
-
+  
       if (error) {
+        console.error("Auth error:", error);
         setState({ ...state, error: error as unknown as Error, isLoading: false });
         return { error: error as unknown as Error };
       }
-
+  
+      console.log("Auth successful, session:", data.session?.access_token ? "Present" : "Missing");
+  
+      // Pastikan session sudah tersimpan dengan benar
+      if (data.session) {
+        // Set cookie secara manual jika perlu
+        document.cookie = `supabase-auth-token=${data.session.access_token}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
+      }
+  
+      // Get the user profile
       const profile = await getProfile();
+      console.log("Profile fetched after login:", profile);
+      
       setState({
         ...state,
         session: data.session,
@@ -132,9 +197,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isLoading: false,
         error: null
       });
-
+  
+      // Force navigation setelah setState
+      console.log("About to redirect to dashboard");
+      setTimeout(() => {
+        window.location.href = '/dashboard';
+      }, 500);
+  
       return { error: null };
     } catch (error) {
+      console.error("Unexpected login error:", error);
       setState({ ...state, error: error as Error, isLoading: false });
       return { error: error as Error };
     }
@@ -156,82 +228,86 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
         }
       });
-
+  
       if (error) {
         setState({ ...state, error: error as unknown as Error, isLoading: false });
         return { error: error as unknown as Error, user: null };
       }
-
+  
+      console.log("User registered successfully, user ID:", data.user?.id);
+  
       // Create profile entry in profiles table
       if (data.user) {
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .insert([
-            {
-              id: data.user.id,
-              name: credentials.name,
-              username: credentials.username || null,
-              roles: [credentials.role]
+        try {
+          console.log("Attempting to insert profile with ID:", data.user.id);
+          
+          const { error: profileError } = await supabase
+            .from('profiles')
+            .insert([
+              {
+                id: data.user.id,
+                name: credentials.name,
+                username: credentials.username || null,
+                roles: [credentials.role]
+              }
+            ]);
+  
+          if (profileError) {
+            console.error('Error creating profile:', profileError);
+            console.log("Will try again in getProfile function");
+          } else {
+            console.log('Profile created successfully');
+            
+            console.log("Creating role-specific profile for:", credentials.role);
+            
+            // Create role-specific profile
+            try {
+              if (credentials.role === 'mahasiswa') {
+                await supabase
+                  .from('mahasiswas')
+                  .insert([
+                    {
+                      user_id: data.user.id,
+                      nama: credentials.name,
+                      nim: credentials.username || '',
+                      email: credentials.email
+                    }
+                  ]);
+                  console.log("Created mahasiswa record");
+              } else if (credentials.role === 'dosen') {
+                await supabase
+                  .from('dosens')
+                  .insert([
+                    {
+                      user_id: data.user.id,
+                      nama_dosen: credentials.name,
+                      nip: credentials.username || '',
+                      email: credentials.email
+                    }
+                  ]);
+                  console.log("Created dosen record");
+              } else if (credentials.role === 'tendik' || credentials.role === 'koorpro') {
+                await supabase
+                  .from('tendiks')
+                  .insert([
+                    {
+                      user_id: data.user.id,
+                      nama_tendik: credentials.name,
+                      nip: credentials.username || '',
+                      email: credentials.email
+                    }
+                  ]);
+                  console.log("Created tendik record");
+              }
+            } catch (roleError) {
+              console.error("Error creating role-specific profile:", roleError);
             }
-          ]);
-
-        if (profileError) {
-          setState({ ...state, error: profileError as unknown as Error, isLoading: false });
-          return { error: profileError as unknown as Error, user: null };
-        }
-
-        // Create role-specific profile (mahasiswa/dosen/tendik)
-        if (credentials.role === 'mahasiswa') {
-          const { error: mahasiswaError } = await supabase
-            .from('mahasiswas')
-            .insert([
-              {
-                user_id: data.user.id,
-                nama: credentials.name,
-                nim: credentials.username || '',
-                email: credentials.email
-              }
-            ]);
-
-          if (mahasiswaError) {
-            setState({ ...state, error: mahasiswaError as unknown as Error, isLoading: false });
-            return { error: mahasiswaError as unknown as Error, user: null };
           }
-        } else if (credentials.role === 'dosen') {
-          const { error: dosenError } = await supabase
-            .from('dosens')
-            .insert([
-              {
-                user_id: data.user.id,
-                nama_dosen: credentials.name,
-                nip: credentials.username || '',
-                email: credentials.email
-              }
-            ]);
-
-          if (dosenError) {
-            setState({ ...state, error: dosenError as unknown as Error, isLoading: false });
-            return { error: dosenError as unknown as Error, user: null };
-          }
-        } else if (credentials.role === 'tendik') {
-          const { error: tendikError } = await supabase
-            .from('tendiks')
-            .insert([
-              {
-                user_id: data.user.id,
-                nama_tendik: credentials.name,
-                nip: credentials.username || '',
-                email: credentials.email
-              }
-            ]);
-
-          if (tendikError) {
-            setState({ ...state, error: tendikError as unknown as Error, isLoading: false });
-            return { error: tendikError as unknown as Error, user: null };
-          }
+        } catch (insertError) {
+          console.error('Error in register process:', insertError);
         }
       }
-
+  
       // Get the user profile
       const profile = await getProfile();
       setState({
@@ -241,9 +317,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isLoading: false,
         error: null
       });
-
+  
       return { error: null, user: data.user };
     } catch (error) {
+      console.error("Unexpected error in register:", error);
       setState({ ...state, error: error as Error, isLoading: false });
       return { error: error as Error, user: null };
     }
