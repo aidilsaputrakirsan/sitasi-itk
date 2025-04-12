@@ -37,22 +37,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Check for active session on mount
     const { data: authListener } = supabase.auth.onAuthStateChange(
       async (event: AuthChangeEvent, session: Session | null) => {
+        console.log("Auth state change:", event, session ? "Session exists" : "No session");
+        
         if (session) {
           // Fetch the user profile
           const profile = await getProfile();
-          setState({
-            ...state,
+          console.log("Profile fetched on auth change:", profile);
+          
+          setState(prevState => ({
+            ...prevState,
             session,
             user: profile,
             isLoading: false
-          });
+          }));
         } else {
-          setState({
-            ...state,
+          setState(prevState => ({
+            ...prevState,
             session: null,
             user: null,
             isLoading: false
-          });
+          }));
         }
       }
     );
@@ -64,17 +68,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (session) {
         // Fetch the user profile
         const profile = await getProfile();
-        setState({
-          ...state,
+        setState(prevState => ({
+          ...prevState,
           session,
           user: profile,
           isLoading: false
-        });
+        }));
       } else {
-        setState({
-          ...state,
+        setState(prevState => ({
+          ...prevState,
           isLoading: false
-        });
+        }));
       }
     };
 
@@ -93,67 +97,60 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   
       console.log("Fetching profile for user ID:", user.id);
   
-      // Coba ambil profil - cara alternatif yang lebih langsung
+      // Fetch profile directly
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('*')
-        .eq('id', user.id);
+        .eq('id', user.id)
+        .single();
       
-      // Periksa hasil kueri tanpa menggunakan .single()
       if (profileError) {
         console.error("Error in profile query:", profileError);
-      }
-      
-      console.log("Profile query result:", profileData);
-      
-      // Jika profil ditemukan - ambil yang pertama
-      if (profileData && profileData.length > 0) {
-        console.log("Found profile:", profileData[0]);
-        return profileData[0] as UserProfile;
-      }
-      
-      console.log("No profile found, attempting to create one");
-      
-      // Jika tidak ada profil, cek terlebih dahulu apakah sudah ada
-      const { data: existingProfiles, error: checkError } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('id', user.id);
-      
-      // Jika profil sudah ada, hindari membuat yang baru
-      if (existingProfiles && existingProfiles.length > 0) {
-        console.log("Profile exists but couldn't be retrieved properly");
+        
+        // If the profile doesn't exist yet, we'll create it
+        if (profileError.code === 'PGRST116') {
+          console.log("No profile found, creating one");
+          
+          const userMetadata = user.user_metadata;
+          const role = userMetadata?.role || 'mahasiswa';
+          const roles = Array.isArray(role) ? role : [role];
+          
+          const { data: newProfile, error: insertError } = await supabase
+            .from('profiles')
+            .insert([
+              {
+                id: user.id,
+                name: userMetadata?.name || user.email?.split('@')[0] || 'User',
+                username: userMetadata?.username || null,
+                roles: roles
+              }
+            ])
+            .select('*')
+            .single();
+            
+          if (insertError) {
+            console.error('Error creating profile:', insertError);
+            return null;
+          }
+          
+          return newProfile as UserProfile;
+        }
+        
+        // Fall back to creating a profile from user metadata
+        const userMetadata = user.user_metadata;
+        const role = userMetadata?.role || 'mahasiswa';
+        const roles = Array.isArray(role) ? role : [role];
+        
         return {
           id: user.id,
-          name: user.user_metadata?.name || 'User',
-          roles: user.user_metadata?.role ? [user.user_metadata.role] : ['mahasiswa'],
+          name: userMetadata?.name || user.email?.split('@')[0] || 'User',
+          username: userMetadata?.username || null,
+          roles: roles,
         } as UserProfile;
       }
       
-      // Buat profil baru jika benar-benar tidak ada
-      const userMetadata = user.user_metadata;
-      const role = userMetadata?.role || 'mahasiswa';
-      const roles = Array.isArray(role) ? role : [role];
-      
-      const { data: newProfile, error: insertError } = await supabase
-        .from('profiles')
-        .insert([
-          {
-            id: user.id,
-            name: userMetadata?.name || user.email?.split('@')[0] || 'User',
-            username: userMetadata?.username || null,
-            roles: roles
-          }
-        ])
-        .select('*')
-        .single();
-        
-      if (insertError) {
-        console.error('Error creating profile:', insertError);
-        return null;
-      }
-      
-      return newProfile as UserProfile;
+      console.log("Profile found:", profileData);
+      return profileData as UserProfile;
     } catch (error) {
       console.error('Error in getProfile:', error);
       return null;
@@ -162,9 +159,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const login = async (credentials: LoginCredentials) => {
     try {
-      setState({ ...state, isLoading: true, error: null });
+      setState(prevState => ({ ...prevState, isLoading: true, error: null }));
       
-      // Tambahkan console log untuk debugging
       console.log("Login attempt started for:", credentials.email);
       
       const { data, error } = await supabase.auth.signInWithPassword({
@@ -174,47 +170,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   
       if (error) {
         console.error("Auth error:", error);
-        setState({ ...state, error: error as unknown as Error, isLoading: false });
+        setState(prevState => ({ ...prevState, error: error as unknown as Error, isLoading: false }));
         return { error: error as unknown as Error };
       }
   
       console.log("Auth successful, session:", data.session?.access_token ? "Present" : "Missing");
   
-      // Pastikan session sudah tersimpan dengan benar
-      if (data.session) {
-        // Set cookie secara manual jika perlu
-        document.cookie = `supabase-auth-token=${data.session.access_token}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
-      }
-  
       // Get the user profile
       const profile = await getProfile();
       console.log("Profile fetched after login:", profile);
       
-      setState({
-        ...state,
+      // Update state with the new session and user info
+      setState(prevState => ({
+        ...prevState,
         session: data.session,
         user: profile,
         isLoading: false,
         error: null
-      });
+      }));
   
-      // Force navigation setelah setState
-      console.log("About to redirect to dashboard");
-      setTimeout(() => {
-        window.location.href = '/dashboard';
-      }, 500);
-  
+      // Let the login component handle redirects
       return { error: null };
     } catch (error) {
       console.error("Unexpected login error:", error);
-      setState({ ...state, error: error as Error, isLoading: false });
+      setState(prevState => ({ ...prevState, error: error as Error, isLoading: false }));
       return { error: error as Error };
     }
   };
 
   const register = async (credentials: RegisterCredentials) => {
     try {
-      setState({ ...state, isLoading: true, error: null });
+      setState(prevState => ({ ...prevState, isLoading: true, error: null }));
       
       // Register user with Supabase Auth
       const { data, error } = await supabase.auth.signUp({
@@ -230,7 +216,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
   
       if (error) {
-        setState({ ...state, error: error as unknown as Error, isLoading: false });
+        setState(prevState => ({ ...prevState, error: error as unknown as Error, isLoading: false }));
         return { error: error as unknown as Error, user: null };
       }
   
@@ -254,7 +240,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   
           if (profileError) {
             console.error('Error creating profile:', profileError);
-            console.log("Will try again in getProfile function");
           } else {
             console.log('Profile created successfully');
             
@@ -310,35 +295,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   
       // Get the user profile
       const profile = await getProfile();
-      setState({
-        ...state,
+      setState(prevState => ({
+        ...prevState,
         session: data.session,
         user: profile,
         isLoading: false,
         error: null
-      });
+      }));
   
       return { error: null, user: data.user };
     } catch (error) {
       console.error("Unexpected error in register:", error);
-      setState({ ...state, error: error as Error, isLoading: false });
+      setState(prevState => ({ ...prevState, error: error as Error, isLoading: false }));
       return { error: error as Error, user: null };
     }
   };
 
   const logout = async () => {
     await supabase.auth.signOut();
-    setState({
-      ...state,
+    setState(prevState => ({
+      ...prevState,
       session: null,
       user: null
-    });
+    }));
     router.push('/login');
   };
 
   const resetPassword = async (credentials: ResetPasswordCredentials) => {
     try {
-      setState({ ...state, isLoading: true, error: null });
+      setState(prevState => ({ ...prevState, isLoading: true, error: null }));
       
       const { error } = await supabase.auth.resetPasswordForEmail(
         credentials.email,
@@ -347,26 +332,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       );
 
-      setState({ ...state, isLoading: false, error: error as unknown as Error | null });
+      setState(prevState => ({ ...prevState, isLoading: false, error: error as unknown as Error | null }));
       return { error: error as unknown as Error | null };
     } catch (error) {
-      setState({ ...state, error: error as Error, isLoading: false });
+      setState(prevState => ({ ...prevState, error: error as Error, isLoading: false }));
       return { error: error as Error };
     }
   };
 
   const updatePassword = async (credentials: UpdatePasswordCredentials) => {
     try {
-      setState({ ...state, isLoading: true, error: null });
+      setState(prevState => ({ ...prevState, isLoading: true, error: null }));
       
       const { error } = await supabase.auth.updateUser({
         password: credentials.password
       });
 
-      setState({ ...state, isLoading: false, error: error as unknown as Error | null });
+      setState(prevState => ({ ...prevState, isLoading: false, error: error as unknown as Error | null }));
       return { error: error as unknown as Error | null };
     } catch (error) {
-      setState({ ...state, error: error as Error, isLoading: false });
+      setState(prevState => ({ ...prevState, error: error as Error, isLoading: false }));
       return { error: error as Error };
     }
   };

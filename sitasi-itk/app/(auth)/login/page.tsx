@@ -1,13 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '../../../contexts/AuthContext';
 import { LoginCredentials } from '../../../types/auth';
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { AuthDebugger } from '../../../components/AuthDebugger';
 
 const loginSchema = z.object({
   email: z.string().email('Email tidak valid'),
@@ -19,7 +19,6 @@ type LoginFormValues = z.infer<typeof loginSchema>;
 export default function LoginPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const router = useRouter();
   const { login } = useAuth();
 
   const {
@@ -30,7 +29,6 @@ export default function LoginPage() {
     resolver: zodResolver(loginSchema),
   });
 
-  // Dalam fungsi onSubmit di file login/page.tsx
   const onSubmit = async (data: LoginFormValues) => {
     setIsSubmitting(true);
     setError(null);
@@ -52,15 +50,10 @@ export default function LoginPage() {
         return;
       }
 
-      console.log("Login successful, redirecting to dashboard");
+      console.log("Login successful, using direct navigation to dashboard");
       
-      // Force redirect to dashboard
+      // Force direct navigation - bypassing Next.js router
       window.location.href = '/dashboard';
-      
-      // Fallback if the above doesn't work
-      setTimeout(() => {
-        router.push('/dashboard');
-      }, 1000);
     } catch (err) {
       console.error('Login error:', err);
       setError('Terjadi kesalahan saat login');
@@ -164,6 +157,7 @@ export default function LoginPage() {
           </div>
         </form>
       </div>
+      <AuthDebugger />
     </div>
   );
 }

@@ -58,18 +58,37 @@ export default function DashboardLayout({
   const pathname = usePathname();
   const router = useRouter();
 
+  // Add more detailed debugging
+  console.log("Dashboard layout rendering, auth state:", {
+    userExists: !!user,
+    isLoading,
+    roles: user?.roles || []
+  });
+
   useEffect(() => {
-    // If authentication is not loading and user is not logged in, redirect to login
+    // Check if the user is not authenticated and auth is not loading
     if (!isLoading && !user) {
-      router.push('/login');
+      console.log("No authenticated user found in dashboard layout, redirecting to login");
+      router.replace('/login');
     }
   }, [user, isLoading, router]);
 
-  // If still loading or user not logged in, show loading
-  if (isLoading || !user) {
+  // Show loading state while checking auth
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-600"></div>
+        <p className="ml-3 text-primary-600">Loading authentication...</p>
+      </div>
+    );
+  }
+
+  // If no user is present, show a minimal loading state (middleware should handle redirect)
+  if (!user) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-600"></div>
+        <p className="ml-3 text-primary-600">Checking authentication...</p>
       </div>
     );
   }
