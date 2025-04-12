@@ -1,15 +1,14 @@
-// hooks/useMahasiswas.ts
+// hooks/useDosens.ts
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 
-export type Mahasiswa = {
+export type Dosen = {
   id: string;
-  nama: string;
-  nim: string;
+  nama_dosen: string;
+  nip: string;
   email: string;
-  nomor_telepon?: string;
   user_id: string;
   profiles?: {
     name: string;
@@ -17,47 +16,45 @@ export type Mahasiswa = {
   }
 };
 
-// Fetch all students
-export function useMahasiswas() {
+// Fetch all lecturers
+export function useDosens() {
   return useQuery({
-    queryKey: ['mahasiswas'],
+    queryKey: ['dosens'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('mahasiswas')
+        .from('dosens')
         .select(`
           id, 
-          nama, 
-          nim, 
-          email, 
-          nomor_telepon,
+          nama_dosen, 
+          nip, 
+          email,
           user_id,
           profiles:user_id (
             name,
             photo_url
           )
         `)
-        .order('nama');
+        .order('nama_dosen');
       
       if (error) throw error;
       
-      return data as unknown as Mahasiswa[];
+      return data as unknown as Dosen[];
     },
   });
 }
 
-// Fetch a single student by ID
-export function useMahasiswaDetail(id: string) {
+// Fetch a single lecturer by ID
+export function useDosenDetail(id: string) {
   return useQuery({
-    queryKey: ['mahasiswas', id],
+    queryKey: ['dosens', id],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('mahasiswas')
+        .from('dosens')
         .select(`
           id, 
-          nama, 
-          nim, 
-          email, 
-          nomor_telepon,
+          nama_dosen, 
+          nip, 
+          email,
           user_id,
           profiles:user_id (
             name,
@@ -69,25 +66,24 @@ export function useMahasiswaDetail(id: string) {
       
       if (error) throw error;
       
-      return data as unknown as Mahasiswa;
+      return data as unknown as Dosen;
     },
     enabled: !!id,
   });
 }
 
-// Fetch a student by user_id
-export function useMahasiswaByUserId(userId: string) {
+// Fetch a lecturer by user_id
+export function useDosenByUserId(userId: string) {
   return useQuery({
-    queryKey: ['mahasiswas', 'user', userId],
+    queryKey: ['dosens', 'user', userId],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('mahasiswas')
+        .from('dosens')
         .select(`
           id, 
-          nama, 
-          nim, 
-          email, 
-          nomor_telepon,
+          nama_dosen, 
+          nip, 
+          email,
           user_id,
           profiles:user_id (
             name,
@@ -99,7 +95,7 @@ export function useMahasiswaByUserId(userId: string) {
       
       if (error) throw error;
       
-      return data as unknown as Mahasiswa;
+      return data as unknown as Dosen;
     },
     enabled: !!userId,
   });
