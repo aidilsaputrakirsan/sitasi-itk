@@ -8,15 +8,24 @@ import { StatusBadge } from '@/components/StatusBadge';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Separator } from "@/components/ui/separator";
 import { 
   FileEdit, CheckCircle, XCircle, History, User, CalendarClock, FileText, Book 
 } from 'lucide-react';
 import { useRiwayatPengajuan } from '@/hooks/usePengajuanTA';
 import { useAuth } from '@/contexts/AuthContext';
-import { format } from 'date-fns';
-import { id } from 'date-fns/locale';
-import { ScrollArea } from "@/components/ui/scroll-area";
+
+// Simple Separator replacement
+const Separator = () => <div className="h-[1px] w-full bg-gray-200 my-4"></div>;
+
+// Simpler date formatting without date-fns
+const formatDate = (dateString: string) => {
+  const date = new Date(dateString);
+  return date.toLocaleDateString('id-ID', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric'
+  });
+};
 
 interface PengajuanTADetailProps {
   pengajuan: PengajuanTA;
@@ -41,11 +50,6 @@ export function PengajuanTADetail({
 }: PengajuanTADetailProps) {
   const { data: riwayat } = useRiwayatPengajuan(pengajuan.id);
   const { user } = useAuth();
-  
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return format(date, 'dd MMMM yyyy', { locale: id });
-  };
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -206,7 +210,7 @@ export function PengajuanTADetail({
             </div>
           </CardHeader>
           <CardContent>
-            <ScrollArea className="h-[300px] pr-4">
+            <div className="max-h-[300px] overflow-y-auto pr-4">
               <div className="space-y-4">
                 {riwayat?.map((item) => (
                   <div key={item.id} className="border-l-2 border-gray-200 pl-4 py-1">
@@ -228,7 +232,7 @@ export function PengajuanTADetail({
                   </p>
                 )}
               </div>
-            </ScrollArea>
+            </div>
           </CardContent>
         </Card>
       </div>

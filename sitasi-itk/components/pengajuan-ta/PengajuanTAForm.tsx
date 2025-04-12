@@ -1,7 +1,7 @@
 // components/pengajuan-ta/PengajuanTAForm.tsx
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -48,6 +48,11 @@ export function PengajuanTAForm({
   const { toast } = useToast();
   const { data: dosens, isLoading: isLoadingDosens } = useDosens();
   
+  // State for select values (as a fallback for the radix-ui selects)
+  const [bidangPenelitian, setBidangPenelitian] = useState(defaultValues?.bidang_penelitian || '');
+  const [pembimbing1, setPembimbing1] = useState(defaultValues?.pembimbing_1 || '');
+  const [pembimbing2, setPembimbing2] = useState(defaultValues?.pembimbing_2 || '');
+  
   const {
     register,
     handleSubmit,
@@ -64,8 +69,18 @@ export function PengajuanTAForm({
     }
   });
 
-  // Watch pembimbing_1 to prevent selecting the same dosen for both
-  const pembimbing1 = watch('pembimbing_1');
+  // Update the form values when the select values change
+  useEffect(() => {
+    if (bidangPenelitian) {
+      setValue('bidang_penelitian', bidangPenelitian);
+    }
+    if (pembimbing1) {
+      setValue('pembimbing_1', pembimbing1);
+    }
+    if (pembimbing2) {
+      setValue('pembimbing_2', pembimbing2);
+    }
+  }, [bidangPenelitian, pembimbing1, pembimbing2, setValue]);
 
   const handleFormSubmit = (data: PengajuanTAFormValues) => {
     onSubmit(data);
@@ -93,7 +108,10 @@ export function PengajuanTAForm({
           <div className="space-y-2">
             <Label htmlFor="bidang_penelitian">Bidang Penelitian</Label>
             <Select 
-              onValueChange={(value) => setValue('bidang_penelitian', value)}
+              onValueChange={(value: string) => {
+                setBidangPenelitian(value);
+                setValue('bidang_penelitian', value);
+              }}
               defaultValue={defaultValues?.bidang_penelitian}
             >
               <SelectTrigger id="bidang_penelitian">
@@ -120,7 +138,10 @@ export function PengajuanTAForm({
           <div className="space-y-2">
             <Label htmlFor="pembimbing_1">Pembimbing 1</Label>
             <Select 
-              onValueChange={(value) => setValue('pembimbing_1', value)}
+              onValueChange={(value: string) => {
+                setPembimbing1(value);
+                setValue('pembimbing_1', value);
+              }}
               defaultValue={defaultValues?.pembimbing_1}
             >
               <SelectTrigger id="pembimbing_1">
@@ -144,7 +165,10 @@ export function PengajuanTAForm({
           <div className="space-y-2">
             <Label htmlFor="pembimbing_2">Pembimbing 2</Label>
             <Select 
-              onValueChange={(value) => setValue('pembimbing_2', value)}
+              onValueChange={(value: string) => {
+                setPembimbing2(value);
+                setValue('pembimbing_2', value);
+              }}
               defaultValue={defaultValues?.pembimbing_2}
             >
               <SelectTrigger id="pembimbing_2">

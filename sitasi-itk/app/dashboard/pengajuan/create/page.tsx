@@ -3,6 +3,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
 import { PengajuanTAForm } from '@/components/pengajuan-ta/PengajuanTAForm';
 import { useCreatePengajuanTA } from '@/hooks/usePengajuanTA';
@@ -10,7 +11,9 @@ import { useMahasiswaByUserId } from '@/hooks/useMahasiswas';
 import { PengajuanTAFormValues } from '@/types/pengajuan-ta';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { useRBAC } from '@/hooks/useRBAC';
+import { AlertCircle } from 'lucide-react';
 
 export default function CreatePengajuanPage() {
   const router = useRouter();
@@ -18,6 +21,7 @@ export default function CreatePengajuanPage() {
   const { toast } = useToast();
   const { mutate: createPengajuan, isPending } = useCreatePengajuanTA();
   const [mahasiswaId, setMahasiswaId] = useState<string>('');
+  const [profileMissing, setProfileMissing] = useState(false);
   
   // Check if user has the right role to access this page
   const { hasAccess, isLoading: rbacLoading } = useRBAC({
@@ -25,16 +29,20 @@ export default function CreatePengajuanPage() {
   });
   
   // Fetch mahasiswa data for the current user
-  const { data: mahasiswaData, isLoading: isLoadingMahasiswa } = useMahasiswaByUserId(
+  const { data: mahasiswaData, isLoading: isLoadingMahasiswa, error: mahasiswaError } = useMahasiswaByUserId(
     user?.id || ''
   );
   
-  // Set mahasiswaId when data is available
+  // Set mahasiswaId when data is available and check for profile errors
   useEffect(() => {
     if (mahasiswaData) {
       setMahasiswaId(mahasiswaData.id);
+      setProfileMissing(false);
+    } else if (mahasiswaError && !isLoadingMahasiswa) {
+      console.error('Error fetching mahasiswa data:', mahasiswaError);
+      setProfileMissing(true);
     }
-  }, [mahasiswaData]);
+  }, [mahasiswaData, mahasiswaError, isLoadingMahasiswa]);
   
   const handleSubmit = (formValues: PengajuanTAFormValues) => {
     if (!mahasiswaId) {
@@ -43,6 +51,7 @@ export default function CreatePengajuanPage() {
         title: "Error",
         description: "Data mahasiswa tidak ditemukan. Silakan lengkapi profil Anda terlebih dahulu.",
       });
+      router.push('/dashboard/profile');
       return;
     }
     
@@ -51,6 +60,14 @@ export default function CreatePengajuanPage() {
       {
         onSuccess: () => {
           router.push('/dashboard/pengajuan');
+        },
+        onError: (error) => {
+          console.error('Error submitting proposal:', error);
+          toast({
+            variant: "destructive",
+            title: "Error",
+            description: error.message || "Terjadi kesalahan saat mengajukan proposal tugas akhir.",
+          });
         }
       }
     );
@@ -84,6 +101,40 @@ export default function CreatePengajuanPage() {
           </div>
         </CardContent>
       </Card>
+    );
+  }
+  
+  if (profileMissing) {
+    return (
+      <div>
+        <div className="mb-6">
+          <h1 className="text-2xl font-semibold text-gray-900">Pengajuan Tugas Akhir</h1>
+          <p className="mt-1 text-sm text-gray-500">
+            Isi formulir di bawah ini untuk mengajukan proposal tugas akhir Anda
+          </p>
+        </div>
+        
+        <Card>
+          <CardContent className="pt-6 pb-6">
+            <div className="bg-red-50 border-l-4 border-red-400 p-4 flex">
+              <AlertCircle className="h-5 w-5 text-red-500 mr-2 flex-shrink-0 mt-0.5" />
+              <div>
+                <h3 className="font-medium text-red-800">Data Mahasiswa Tidak Ditemukan</h3>
+                <p className="text-sm text-red-700 mt-1">
+                  Anda perlu melengkapi data profil mahasiswa terlebih dahulu sebelum dapat mengajukan proposal tugas akhir.
+                </p>
+                <div className="mt-3">
+                  <Button asChild variant="default">
+                    <Link href="/dashboard/profile">
+                      Lengkapi Profil
+                    </Link>
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     );
   }
   

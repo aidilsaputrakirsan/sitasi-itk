@@ -1,7 +1,7 @@
 // app/dashboard/pengajuan/[id]/page.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, ReactNode, ChangeEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { PengajuanTADetail } from '@/components/pengajuan-ta/PengajuanTADetail';
@@ -10,19 +10,109 @@ import { useMahasiswaByUserId } from '@/hooks/useMahasiswas';
 import { useDosenByUserId } from '@/hooks/useDosens';
 import { UserRole } from '@/types/auth';
 import { useToast } from '@/hooks/use-toast';
-import { 
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label';
+
+// Define interfaces for our temporary components
+interface AlertDialogProps {
+  children: ReactNode;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}
+
+interface AlertDialogContentProps {
+  children: ReactNode;
+}
+
+interface AlertDialogHeaderProps {
+  children: ReactNode;
+}
+
+interface AlertDialogTitleProps {
+  children: ReactNode;
+}
+
+interface AlertDialogDescriptionProps {
+  children: ReactNode;
+}
+
+interface AlertDialogFooterProps {
+  children: ReactNode;
+}
+
+interface AlertDialogCancelProps {
+  children: ReactNode;
+  onClick: () => void;
+}
+
+interface AlertDialogActionProps {
+  children: ReactNode;
+  onClick: () => void;
+  disabled?: boolean;
+}
+
+interface TextareaProps {
+  id: string;
+  placeholder: string;
+  value: string;
+  onChange: (e: ChangeEvent<HTMLTextAreaElement>) => void;
+  className?: string;
+}
+
+interface LabelProps {
+  htmlFor: string;
+  children: ReactNode;
+}
+
+// TEMPORARY SOLUTION: Instead of importing the missing UI components,
+// we'll use basic HTML elements with proper TypeScript interfaces
+const AlertDialog = ({ children, open, onOpenChange }: AlertDialogProps) => (
+  open ? <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center">
+    <div className="bg-white p-6 rounded-lg max-w-md w-full">
+      {children}
+    </div>
+  </div> : null
+);
+
+const AlertDialogContent = ({ children }: AlertDialogContentProps) => <div>{children}</div>;
+const AlertDialogHeader = ({ children }: AlertDialogHeaderProps) => <div className="mb-4">{children}</div>;
+const AlertDialogTitle = ({ children }: AlertDialogTitleProps) => <h3 className="text-lg font-medium">{children}</h3>;
+const AlertDialogDescription = ({ children }: AlertDialogDescriptionProps) => <p className="text-sm text-gray-500">{children}</p>;
+const AlertDialogFooter = ({ children }: AlertDialogFooterProps) => <div className="flex justify-end gap-2 mt-4">{children}</div>;
+const AlertDialogCancel = ({ children, onClick }: AlertDialogCancelProps) => (
+  <button 
+    className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium bg-white text-gray-700 hover:bg-gray-50"
+    onClick={onClick}
+  >
+    {children}
+  </button>
+);
+const AlertDialogAction = ({ children, onClick, disabled }: AlertDialogActionProps) => (
+  <button 
+    className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 disabled:opacity-50"
+    onClick={onClick}
+    disabled={disabled}
+  >
+    {children}
+  </button>
+);
+
+// Textarea replacement
+const Textarea = ({ id, placeholder, value, onChange, className }: TextareaProps) => (
+  <textarea
+    id={id}
+    placeholder={placeholder}
+    value={value}
+    onChange={onChange}
+    className={`w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 ${className}`}
+  />
+);
+
+// Label replacement
+const Label = ({ htmlFor, children }: LabelProps) => (
+  <label htmlFor={htmlFor} className="block text-sm font-medium text-gray-700 mb-1">
+    {children}
+  </label>
+);
 
 export default function PengajuanDetailPage({ params }: { params: { id: string } }) {
   const router = useRouter();
@@ -107,8 +197,12 @@ export default function PengajuanDetailPage({ params }: { params: { id: string }
           id: pengajuan.id,
           data: {}, // No need to update pengajuan_ta again
           userId: dosenId,
-          keterangan: `Ditolak dengan alasan: ${rejectReason}`
+          // Pass rejection reason as extra information to the hook
+          // We'll modify the hook to handle this properly
         });
+        
+        // Create a separate function to add the rejection reason to riwayat_pengajuans
+        addRiwayatPengajuan(pengajuan.id, dosenId, 'Ditolak', `Ditolak dengan alasan: ${rejectReason}`);
         
         setShowRejectDialog(false);
         setRejectReason('');
@@ -132,13 +226,8 @@ export default function PengajuanDetailPage({ params }: { params: { id: string }
       userId: dosenId
     }, {
       onSuccess: () => {
-        // Add revision notes to riwayat_pengajuans
-        updatePengajuan({
-          id: pengajuan.id,
-          data: {}, // No need to update pengajuan_ta again
-          userId: dosenId,
-          keterangan: `Perlu revisi: ${revisionNotes}`
-        });
+        // Add revision notes to riwayat_pengajuans separately
+        addRiwayatPengajuan(pengajuan.id, dosenId, 'Revisi', `Perlu revisi: ${revisionNotes}`);
         
         setShowRevisionDialog(false);
         setRevisionNotes('');
@@ -149,6 +238,23 @@ export default function PengajuanDetailPage({ params }: { params: { id: string }
         });
       }
     });
+  };
+  
+  // Helper function to add riwayat_pengajuan separately
+  const addRiwayatPengajuan = async (pengajuanId: string, userId: string, riwayat: string, keterangan: string) => {
+    try {
+      const { supabase } = await import('@/lib/supabase');
+      
+      await supabase.from('riwayat_pengajuans').insert([{
+        pengajuan_ta_id: pengajuanId,
+        user_id: userId,
+        riwayat,
+        keterangan,
+        status: riwayat.toLowerCase(),
+      }]);
+    } catch (error) {
+      console.error('Error adding riwayat:', error);
+    }
   };
   
   if (isLoading) {
@@ -213,7 +319,7 @@ export default function PengajuanDetailPage({ params }: { params: { id: string }
             />
           </div>
           <AlertDialogFooter>
-            <AlertDialogCancel>Batal</AlertDialogCancel>
+            <AlertDialogCancel onClick={() => setShowRejectDialog(false)}>Batal</AlertDialogCancel>
             <AlertDialogAction 
               onClick={handleReject}
               disabled={!rejectReason}
@@ -244,7 +350,7 @@ export default function PengajuanDetailPage({ params }: { params: { id: string }
             />
           </div>
           <AlertDialogFooter>
-            <AlertDialogCancel>Batal</AlertDialogCancel>
+            <AlertDialogCancel onClick={() => setShowRevisionDialog(false)}>Batal</AlertDialogCancel>
             <AlertDialogAction 
               onClick={handleRequestRevision}
               disabled={!revisionNotes}
