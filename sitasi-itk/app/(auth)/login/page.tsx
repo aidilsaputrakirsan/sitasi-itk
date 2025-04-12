@@ -7,7 +7,6 @@ import { LoginCredentials } from '../../../types/auth';
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { AuthDebugger } from '../../../components/AuthDebugger';
 
 const loginSchema = z.object({
   email: z.string().email('Email tidak valid'),
@@ -39,23 +38,17 @@ export default function LoginPage() {
         password: data.password,
       };
 
-      console.log("Attempting login with:", data.email);
-
       const { error } = await login(credentials);
 
       if (error) {
-        console.error("Login error returned:", error);
         setError(error.message);
         setIsSubmitting(false);
         return;
       }
-
-      console.log("Login successful, using direct navigation to dashboard");
       
-      // Force direct navigation - bypassing Next.js router
+      // Direct navigation to dashboard
       window.location.href = '/dashboard';
     } catch (err) {
-      console.error('Login error:', err);
       setError('Terjadi kesalahan saat login');
       setIsSubmitting(false);
     }
@@ -157,7 +150,6 @@ export default function LoginPage() {
           </div>
         </form>
       </div>
-      <AuthDebugger />
     </div>
   );
 }

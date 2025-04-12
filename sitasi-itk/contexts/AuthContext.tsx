@@ -89,73 +89,133 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, []);
 
-  const getProfile = async (): Promise<UserProfile | null> => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      if (!user) return null;
-  
-      console.log("Fetching profile for user ID:", user.id);
-  
-      // Fetch profile directly
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single();
-      
-      if (profileError) {
-        console.error("Error in profile query:", profileError);
+  // Update the getProfile function in contexts/AuthContext.tsx
+
+    const getProfile = async (): Promise<UserProfile | null> => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
         
-        // If the profile doesn't exist yet, we'll create it
-        if (profileError.code === 'PGRST116') {
-          console.log("No profile found, creating one");
+        if (!user) return null;
+
+        // Fetch profile directly
+        const { data: profileData, error: profileError } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', user.id)
+          .single();
+        
+        if (profileError) {
+          // If the profile doesn't exist yet, we'll create it
+          if (profileError.code === 'PGRST116') {
+            const userMetadata = user.user_metadata;
+            const role = userMetadata?.role || 'mahasiswa';
+            const roles = Array.isArray(role) ? role : [role];
+            
+            // Create the profile record
+            const { data: newProfile, error: insertError } = await supabase
+              .from('profiles')
+              .insert([
+                {
+                  id: user.id,
+                  name: userMetadata?.name || user.email?.split('@')[0] || 'User',
+                  username: userMetadata?.username || null,
+                  roles: roles
+                }
+              ])
+              .select('*')
+              .single();
+              
+            if (insertError) {
+              console.error('Error creating profile:', insertError);
+              return null;
+            }
+            
+            // Create role-specific profile
+            try {
+              if (roles.includes('mahasiswa')) {
+                await createMahasiswaProfile(user.id, userMetadata);
+              }
+              
+              if (roles.includes('dosen')) {
+                await createDosenProfile(user.id, userMetadata);
+              }
+              
+              if (roles.includes('tendik') || roles.includes('koorpro')) {
+                await createTendikProfile(user.id, userMetadata);
+              }
+            } catch (roleError) {
+              console.error("Error creating role-specific profile:", roleError);
+              // Continue anyway since the main profile was created
+            }
+            
+            return newProfile as UserProfile;
+          }
           
+          // Fall back to creating a profile from user metadata
           const userMetadata = user.user_metadata;
           const role = userMetadata?.role || 'mahasiswa';
           const roles = Array.isArray(role) ? role : [role];
           
-          const { data: newProfile, error: insertError } = await supabase
-            .from('profiles')
-            .insert([
-              {
-                id: user.id,
-                name: userMetadata?.name || user.email?.split('@')[0] || 'User',
-                username: userMetadata?.username || null,
-                roles: roles
-              }
-            ])
-            .select('*')
-            .single();
-            
-          if (insertError) {
-            console.error('Error creating profile:', insertError);
-            return null;
-          }
-          
-          return newProfile as UserProfile;
+          return {
+            id: user.id,
+            name: userMetadata?.name || user.email?.split('@')[0] || 'User',
+            username: userMetadata?.username || null,
+            roles: roles,
+          } as UserProfile;
         }
         
-        // Fall back to creating a profile from user metadata
-        const userMetadata = user.user_metadata;
-        const role = userMetadata?.role || 'mahasiswa';
-        const roles = Array.isArray(role) ? role : [role];
-        
-        return {
-          id: user.id,
-          name: userMetadata?.name || user.email?.split('@')[0] || 'User',
-          username: userMetadata?.username || null,
-          roles: roles,
-        } as UserProfile;
+        return profileData as UserProfile;
+      } catch (error) {
+        console.error('Error in getProfile:', error);
+        return null;
       }
-      
-      console.log("Profile found:", profileData);
-      return profileData as UserProfile;
-    } catch (error) {
-      console.error('Error in getProfile:', error);
-      return null;
-    }
-  };
+    };
+
+    // Add these helper functions for role-specific profile creation
+    const createMahasiswaProfile = async (userId: string, userMetadata: any) => {
+      const { error } = await supabase
+        .from('mahasiswas')
+        .insert([
+          {
+            user_id: userId,
+            nama: userMetadata?.name || '',
+            nim: userMetadata?.username || '',
+            email: userMetadata?.email || ''
+          }
+        ]);
+        
+      if (error) throw error;
+    };
+
+    const createDosenProfile = async (userId: string, userMetadata: any) => {
+      const { error } = await supabase
+        .from('dosens')
+        .insert([
+          {
+            user_id: userId,
+            nama_dosen: userMetadata?.name || '',
+            nip: userMetadata?.username || '',
+            email: userMetadata?.email || ''
+          }
+        ]);
+        
+      if (error) throw error;
+    };
+
+    const createTendikProfile = async (userId: string, userMetadata: any) => {
+      const { error } = await supabase
+        .from('tendiks')
+        .insert([
+          {
+            user_id: userId,
+            nama_tendik: userMetadata?.name || '',
+            nip: userMetadata?.username || '',
+            email: userMetadata?.email || ''
+          }
+        ]);
+        
+      if (error) throw error;
+    };
 
   const login = async (credentials: LoginCredentials) => {
     try {
@@ -210,7 +270,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           data: {
             name: credentials.name,
             role: credentials.role,
-            username: credentials.username || null
+            username: credentials.username || null,
+            email: credentials.email
           }
         }
       });
@@ -220,13 +281,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return { error: error as unknown as Error, user: null };
       }
   
-      console.log("User registered successfully, user ID:", data.user?.id);
-  
-      // Create profile entry in profiles table
-      if (data.user) {
+      // Only attempt profile creation if user was created and we can get to it
+      if (data.user && data.user.id) {
         try {
-          console.log("Attempting to insert profile with ID:", data.user.id);
-          
+          // Create the main profile
           const { error: profileError } = await supabase
             .from('profiles')
             .insert([
@@ -243,46 +301,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           } else {
             console.log('Profile created successfully');
             
-            console.log("Creating role-specific profile for:", credentials.role);
-            
             // Create role-specific profile
             try {
               if (credentials.role === 'mahasiswa') {
-                await supabase
-                  .from('mahasiswas')
-                  .insert([
-                    {
-                      user_id: data.user.id,
-                      nama: credentials.name,
-                      nim: credentials.username || '',
-                      email: credentials.email
-                    }
-                  ]);
-                  console.log("Created mahasiswa record");
+                await createMahasiswaProfile(data.user.id, {
+                  name: credentials.name, 
+                  username: credentials.username,
+                  email: credentials.email
+                });
               } else if (credentials.role === 'dosen') {
-                await supabase
-                  .from('dosens')
-                  .insert([
-                    {
-                      user_id: data.user.id,
-                      nama_dosen: credentials.name,
-                      nip: credentials.username || '',
-                      email: credentials.email
-                    }
-                  ]);
-                  console.log("Created dosen record");
+                await createDosenProfile(data.user.id, {
+                  name: credentials.name, 
+                  username: credentials.username,
+                  email: credentials.email
+                });
               } else if (credentials.role === 'tendik' || credentials.role === 'koorpro') {
-                await supabase
-                  .from('tendiks')
-                  .insert([
-                    {
-                      user_id: data.user.id,
-                      nama_tendik: credentials.name,
-                      nip: credentials.username || '',
-                      email: credentials.email
-                    }
-                  ]);
-                  console.log("Created tendik record");
+                await createTendikProfile(data.user.id, {
+                  name: credentials.name, 
+                  username: credentials.username,
+                  email: credentials.email
+                });
               }
             } catch (roleError) {
               console.error("Error creating role-specific profile:", roleError);
@@ -294,7 +332,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
   
       // Get the user profile
-      const profile = await getProfile();
+      const profile = data.user ? await getProfile() : null;
       setState(prevState => ({
         ...prevState,
         session: data.session,
