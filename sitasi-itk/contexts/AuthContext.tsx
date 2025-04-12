@@ -91,116 +91,128 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Update the getProfile function in contexts/AuthContext.tsx
 
-    const getProfile = async (): Promise<UserProfile | null> => {
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
+  const getProfile = async (): Promise<UserProfile | null> => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        console.log('No authenticated user found');
+        return null;
+      }
+  
+      console.log('Getting profile for user:', user.id);
+  
+      // Fetch profile directly
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+      
+      if (profileError) {
+        console.error('Profile fetch error:', profileError);
         
-        if (!user) return null;
-
-        // Fetch profile directly
-        const { data: profileData, error: profileError } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', user.id)
-          .single();
-        
-        if (profileError) {
-          // If the profile doesn't exist yet, we'll create it
-          if (profileError.code === 'PGRST116') {
-            const userMetadata = user.user_metadata;
-            const role = userMetadata?.role || 'mahasiswa';
-            const roles = Array.isArray(role) ? role : [role];
-            
-            // Create the profile record
-            const { data: newProfile, error: insertError } = await supabase
-              .from('profiles')
-              .insert([
-                {
-                  id: user.id,
-                  name: userMetadata?.name || user.email?.split('@')[0] || 'User',
-                  username: userMetadata?.username || null,
-                  roles: roles
-                }
-              ])
-              .select('*')
-              .single();
-              
-            if (insertError) {
-              console.error('Error creating profile:', insertError);
-              return null;
-            }
-            
-            // Create role-specific profile
-            try {
-              if (roles.includes('mahasiswa')) {
-                await createMahasiswaProfile(user.id, userMetadata);
-              }
-              
-              if (roles.includes('dosen')) {
-                await createDosenProfile(user.id, userMetadata);
-              }
-              
-              if (roles.includes('tendik') || roles.includes('koorpro')) {
-                await createTendikProfile(user.id, userMetadata);
-              }
-            } catch (roleError) {
-              console.error("Error creating role-specific profile:", roleError);
-              // Continue anyway since the main profile was created
-            }
-            
-            return newProfile as UserProfile;
-          }
-          
-          // Fall back to creating a profile from user metadata
+        // If the profile doesn't exist yet, we'll create it
+        if (profileError.code === 'PGRST116') {
+          console.log('Profile not found, creating from user metadata');
           const userMetadata = user.user_metadata;
           const role = userMetadata?.role || 'mahasiswa';
           const roles = Array.isArray(role) ? role : [role];
           
-          return {
-            id: user.id,
-            name: userMetadata?.name || user.email?.split('@')[0] || 'User',
-            username: userMetadata?.username || null,
-            roles: roles,
-          } as UserProfile;
+          // Create the profile record
+          const { data: newProfile, error: insertError } = await supabase
+            .from('profiles')
+            .insert([
+              {
+                id: user.id,
+                name: userMetadata?.name || user.email?.split('@')[0] || 'User',
+                username: userMetadata?.username || null,
+                roles: roles
+              }
+            ])
+            .select('*')
+            .single();
+            
+          if (insertError) {
+            console.error('Error creating profile:', insertError);
+            return null;
+          }
+          
+          return newProfile as UserProfile;
         }
         
-        return profileData as UserProfile;
-      } catch (error) {
-        console.error('Error in getProfile:', error);
-        return null;
+        // If error isn't about missing profile, create a temporary profile from metadata
+        console.log('Creating temporary profile from user metadata');
+        const userMetadata = user.user_metadata;
+        const role = userMetadata?.role || 'mahasiswa';
+        const roles = Array.isArray(role) ? role : [role];
+        
+        return {
+          id: user.id,
+          name: userMetadata?.name || user.email?.split('@')[0] || 'User',
+          username: userMetadata?.username || null,
+          roles: roles,
+          email: user.email
+        } as UserProfile;
       }
-    };
-
-    // Add these helper functions for role-specific profile creation
-    const createMahasiswaProfile = async (userId: string, userMetadata: any) => {
-      const { error } = await supabase
-        .from('mahasiswas')
-        .insert([
-          {
-            user_id: userId,
-            nama: userMetadata?.name || '',
-            nim: userMetadata?.username || '',
-            email: userMetadata?.email || ''
-          }
-        ]);
-        
-      if (error) throw error;
-    };
-
-    const createDosenProfile = async (userId: string, userMetadata: any) => {
-      const { error } = await supabase
-        .from('dosens')
-        .insert([
-          {
-            user_id: userId,
-            nama_dosen: userMetadata?.name || '',
-            nip: userMetadata?.username || '',
-            email: userMetadata?.email || ''
-          }
-        ]);
-        
-      if (error) throw error;
-    };
+      
+      console.log('Profile found:', profileData);
+      return profileData as UserProfile;
+    } catch (error) {
+      console.error('Error in getProfile:', error);
+      return null;
+    }
+  };
+  
+  // Helper function to create mahasiswa profile during registration
+  const createMahasiswaProfile = async (userId: string, userMetadata: any) => {
+    console.log('Creating mahasiswa profile for user:', userId);
+    
+    const { data, error } = await supabase
+      .from('mahasiswas')
+      .insert([
+        {
+          user_id: userId,
+          nama: userMetadata?.name || '',
+          nim: userMetadata?.username || '',
+          email: userMetadata?.email || ''
+        }
+      ])
+      .select();
+      
+    if (error) {
+      console.error('Error creating mahasiswa profile:', error);
+      throw error;
+    }
+    
+    console.log('Successfully created mahasiswa profile:', data);
+    return data;
+  };
+  
+  // Helper function to create dosen profile during registration
+  const createDosenProfile = async (userId: string, userMetadata: any) => {
+    console.log('Creating dosen profile for user:', userId);
+    
+    const { data, error } = await supabase
+      .from('dosens')
+      .insert([
+        {
+          user_id: userId,
+          nama_dosen: userMetadata?.name || '',
+          nip: userMetadata?.username || '',
+          email: userMetadata?.email || ''
+        }
+      ])
+      .select();
+      
+    if (error) {
+      console.error('Error creating dosen profile:', error);
+      throw error;
+    }
+    
+    console.log('Successfully created dosen profile:', data);
+    return data;
+  };
 
     const createTendikProfile = async (userId: string, userMetadata: any) => {
       const { error } = await supabase
@@ -258,96 +270,101 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const register = async (credentials: RegisterCredentials) => {
-    try {
-      setState(prevState => ({ ...prevState, isLoading: true, error: null }));
-      
-      // Register user with Supabase Auth
-      const { data, error } = await supabase.auth.signUp({
-        email: credentials.email,
-        password: credentials.password,
-        options: {
-          data: {
-            name: credentials.name,
-            role: credentials.role,
-            username: credentials.username || null,
-            email: credentials.email
-          }
-        }
-      });
-  
-      if (error) {
-        setState(prevState => ({ ...prevState, error: error as unknown as Error, isLoading: false }));
-        return { error: error as unknown as Error, user: null };
-      }
-  
-      // Only attempt profile creation if user was created and we can get to it
-      if (data.user && data.user.id) {
-        try {
-          // Create the main profile
-          const { error: profileError } = await supabase
-            .from('profiles')
-            .insert([
-              {
-                id: data.user.id,
-                name: credentials.name,
-                username: credentials.username || null,
-                roles: [credentials.role]
-              }
-            ]);
-  
-          if (profileError) {
-            console.error('Error creating profile:', profileError);
-          } else {
-            console.log('Profile created successfully');
-            
-            // Create role-specific profile
-            try {
-              if (credentials.role === 'mahasiswa') {
-                await createMahasiswaProfile(data.user.id, {
-                  name: credentials.name, 
-                  username: credentials.username,
-                  email: credentials.email
-                });
-              } else if (credentials.role === 'dosen') {
-                await createDosenProfile(data.user.id, {
-                  name: credentials.name, 
-                  username: credentials.username,
-                  email: credentials.email
-                });
-              } else if (credentials.role === 'tendik' || credentials.role === 'koorpro') {
-                await createTendikProfile(data.user.id, {
-                  name: credentials.name, 
-                  username: credentials.username,
-                  email: credentials.email
-                });
-              }
-            } catch (roleError) {
-              console.error("Error creating role-specific profile:", roleError);
-            }
-          }
-        } catch (insertError) {
-          console.error('Error in register process:', insertError);
+ // Improved register function
+const register = async (credentials: RegisterCredentials) => {
+  try {
+    console.log('Starting registration for:', credentials.email);
+    setState(prevState => ({ ...prevState, isLoading: true, error: null }));
+    
+    // Register user with Supabase Auth
+    const { data, error } = await supabase.auth.signUp({
+      email: credentials.email,
+      password: credentials.password,
+      options: {
+        data: {
+          name: credentials.name,
+          role: credentials.role,
+          username: credentials.username || null,
+          email: credentials.email
         }
       }
-  
-      // Get the user profile
-      const profile = data.user ? await getProfile() : null;
-      setState(prevState => ({
-        ...prevState,
-        session: data.session,
-        user: profile,
-        isLoading: false,
-        error: null
-      }));
-  
-      return { error: null, user: data.user };
-    } catch (error) {
-      console.error("Unexpected error in register:", error);
-      setState(prevState => ({ ...prevState, error: error as Error, isLoading: false }));
-      return { error: error as Error, user: null };
+    });
+
+    if (error) {
+      console.error('Registration auth error:', error);
+      setState(prevState => ({ ...prevState, error: error as unknown as Error, isLoading: false }));
+      return { error: error as unknown as Error, user: null };
     }
-  };
+
+    console.log('Auth signup successful, user created:', data.user?.id);
+
+    // Only attempt profile creation if user was created
+    if (data.user && data.user.id) {
+      try {
+        // Create the main profile
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .insert([
+            {
+              id: data.user.id,
+              name: credentials.name,
+              username: credentials.username || null,
+              roles: [credentials.role]
+            }
+          ]);
+
+        if (profileError) {
+          console.error('Error creating profile:', profileError);
+        } else {
+          console.log('Main profile created successfully');
+          
+          // Create role-specific profile
+          try {
+            if (credentials.role === 'mahasiswa') {
+              await createMahasiswaProfile(data.user.id, {
+                name: credentials.name, 
+                username: credentials.username,
+                email: credentials.email
+              });
+            } else if (credentials.role === 'dosen') {
+              await createDosenProfile(data.user.id, {
+                name: credentials.name, 
+                username: credentials.username,
+                email: credentials.email
+              });
+            } else if (credentials.role === 'tendik' || credentials.role === 'koorpro') {
+              // Create tendik profile if needed
+              console.log('Admin account created, no specialized profile needed');
+            }
+          } catch (roleError) {
+            console.error("Error creating role-specific profile:", roleError);
+            // Continue anyway since the main profile was created
+          }
+        }
+      } catch (insertError) {
+        console.error('Error in profile creation process:', insertError);
+      }
+    }
+
+    // Get the user profile
+    const profile = data.user ? await getProfile() : null;
+    console.log('Registration complete, profile:', profile);
+    
+    setState(prevState => ({
+      ...prevState,
+      session: data.session,
+      user: profile,
+      isLoading: false,
+      error: null
+    }));
+
+    return { error: null, user: data.user };
+  } catch (error) {
+    console.error("Unexpected error in register:", error);
+    setState(prevState => ({ ...prevState, error: error as Error, isLoading: false }));
+    return { error: error as Error, user: null };
+  }
+};
 
   const logout = async () => {
     await supabase.auth.signOut();

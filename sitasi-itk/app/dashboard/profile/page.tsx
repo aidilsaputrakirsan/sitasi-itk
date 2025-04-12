@@ -14,6 +14,15 @@ import { z } from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 
+// Helper function untuk mengambil pesan error dengan aman
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  if (typeof error === 'object' && error !== null && 'message' in error) 
+    return (error as {message: string}).message;
+  return 'Unknown error';
+};
+
 // Define the form schema with Zod depending on user role
 const studentProfileSchema = z.object({
   nama: z.string().min(3, 'Nama lengkap minimal 3 karakter'),
@@ -28,8 +37,16 @@ const dosenProfileSchema = z.object({
   email: z.string().email('Email tidak valid'),
 });
 
+const tendikProfileSchema = z.object({
+  nama_tendik: z.string().min(3, 'Nama lengkap minimal 3 karakter'),
+  nip: z.string().min(5, 'NIP minimal 5 karakter'),
+  email: z.string().email('Email tidak valid'),
+  jabatan: z.string().optional(),
+});
+
 type StudentProfileFormValues = z.infer<typeof studentProfileSchema>;
 type DosenProfileFormValues = z.infer<typeof dosenProfileSchema>;
+type TendikProfileFormValues = z.infer<typeof tendikProfileSchema>;
 
 export default function ProfilePage() {
   const { user } = useAuth();
@@ -46,6 +63,7 @@ export default function ProfilePage() {
     handleSubmit: handleSubmitStudent,
     formState: { errors: studentErrors },
     setValue: setStudentValue,
+    reset: resetStudentForm,
   } = useForm<StudentProfileFormValues>({
     resolver: zodResolver(studentProfileSchema),
     defaultValues: {
@@ -62,12 +80,30 @@ export default function ProfilePage() {
     handleSubmit: handleSubmitDosen,
     formState: { errors: dosenErrors },
     setValue: setDosenValue,
+    reset: resetDosenForm,
   } = useForm<DosenProfileFormValues>({
     resolver: zodResolver(dosenProfileSchema),
     defaultValues: {
       nama_dosen: '',
       nip: '',
       email: ''
+    }
+  });
+  
+  // Set up the form for admin staff profile
+  const {
+    register: registerTendik,
+    handleSubmit: handleSubmitTendik,
+    formState: { errors: tendikErrors },
+    setValue: setTendikValue,
+    reset: resetTendikForm,
+  } = useForm<TendikProfileFormValues>({
+    resolver: zodResolver(tendikProfileSchema),
+    defaultValues: {
+      nama_tendik: '',
+      nip: '',
+      email: '',
+      jabatan: ''
     }
   });
   
@@ -82,9 +118,11 @@ export default function ProfilePage() {
       try {
         setIsLoading(true);
         
-        // Determine the user role - make sure user.roles exists
+        console.log('Checking profile for user:', user);
+        
+        // Make sure user.roles exists before accessing it
         if (!user.roles || user.roles.length === 0) {
-          console.error('User roles not found');
+          console.error('User roles not found', user);
           toast({
             variant: "destructive",
             title: "Error",
@@ -94,86 +132,166 @@ export default function ProfilePage() {
           return;
         }
         
+        // Get the user's primary role
         const userRole = user.roles[0] as 'mahasiswa' | 'dosen' | 'tendik' | 'koorpro';
         setProfileRole(userRole);
+        console.log(`User role: ${userRole}`);
         
         if (userRole === 'mahasiswa') {
-          // Check if student profile exists
-          const { data: mahasiswaData, error: mahasiswaError } = await supabase
-            .from('mahasiswas')
-            .select('*')
-            .eq('user_id', user.id)
-            .single();
-          
-          if (mahasiswaError) {
-            if (mahasiswaError.code === 'PGRST116') {
-              // Profile doesn't exist yet, which is expected for new users
-              console.log('Student profile does not exist yet');
-            } else {
-              // Real error occurred
+          try {
+            console.log('Checking student profile for user:', user.id);
+            // Use simplified query to avoid recursion
+            const { data: mahasiswaData, error: mahasiswaError } = await supabase
+              .from('mahasiswas')
+              .select('id, nama, nim, email, nomor_telepon')
+              .eq('user_id', user.id)
+              .limit(1);
+            
+            if (mahasiswaError) {
               console.error('Error fetching student profile:', mahasiswaError);
               toast({
                 variant: "destructive",
                 title: "Error",
-                description: "Terjadi kesalahan saat memuat profil mahasiswa.",
+                description: "Terjadi kesalahan saat memuat profil mahasiswa: " + getErrorMessage(mahasiswaError),
               });
+              // Continue anyway to show empty form
             }
-          } else if (mahasiswaData) {
-            // Profile exists, pre-fill the form
-            setProfileExists(true);
-            setStudentValue('nama', mahasiswaData.nama || '');
-            setStudentValue('nim', mahasiswaData.nim || '');
-            setStudentValue('email', mahasiswaData.email || '');
-            setStudentValue('nomor_telepon', mahasiswaData.nomor_telepon || '');
+            
+            if (mahasiswaData && mahasiswaData.length > 0) {
+              // Profile exists, pre-fill the form
+              console.log('Found student profile:', mahasiswaData[0]);
+              setProfileExists(true);
+              setStudentValue('nama', mahasiswaData[0].nama || '');
+              setStudentValue('nim', mahasiswaData[0].nim || '');
+              setStudentValue('email', mahasiswaData[0].email || '');
+              setStudentValue('nomor_telepon', mahasiswaData[0].nomor_telepon || '');
+            } else {
+              // No profile exists yet
+              console.log('No student profile found for user');
+              setProfileExists(false);
+              
+              // Pre-fill with user data if available
+              if (user.name) setStudentValue('nama', user.name);
+              if (user.email) setStudentValue('email', user.email);
+            }
+          } catch (error) {
+            console.error('Error in mahasiswa profile check:', error);
+            toast({
+              variant: "destructive",
+              title: "Error",
+              description: "Terjadi kesalahan saat memuat profil mahasiswa: " + getErrorMessage(error),
+            });
+            // Continue to show empty form
+            setProfileExists(false);
           }
         } else if (userRole === 'dosen') {
-          // Check if lecturer profile exists
-          const { data: dosenData, error: dosenError } = await supabase
-            .from('dosens')
-            .select('*')
-            .eq('user_id', user.id)
-            .single();
-          
-          if (dosenError) {
-            if (dosenError.code === 'PGRST116') {
-              // Profile doesn't exist yet, which is expected for new users
-              console.log('Lecturer profile does not exist yet');
-            } else {
-              // Real error occurred
+          try {
+            console.log('Checking lecturer profile for user:', user.id);
+            // Use simplified query to avoid similar issues
+            const { data: dosenData, error: dosenError } = await supabase
+              .from('dosens')
+              .select('id, nama_dosen, nip, email')
+              .eq('user_id', user.id)
+              .limit(1);
+            
+            if (dosenError) {
               console.error('Error fetching lecturer profile:', dosenError);
               toast({
                 variant: "destructive",
                 title: "Error",
-                description: "Terjadi kesalahan saat memuat profil dosen.",
+                description: "Terjadi kesalahan saat memuat profil dosen: " + getErrorMessage(dosenError),
               });
+              // Continue anyway to show empty form
             }
-          } else if (dosenData) {
-            // Profile exists, pre-fill the form
-            setProfileExists(true);
-            setDosenValue('nama_dosen', dosenData.nama_dosen || '');
-            setDosenValue('nip', dosenData.nip || '');
-            setDosenValue('email', dosenData.email || '');
+            
+            if (dosenData && dosenData.length > 0) {
+              // Profile exists, pre-fill the form
+              console.log('Found lecturer profile:', dosenData[0]);
+              setProfileExists(true);
+              setDosenValue('nama_dosen', dosenData[0].nama_dosen || '');
+              setDosenValue('nip', dosenData[0].nip || '');
+              setDosenValue('email', dosenData[0].email || '');
+            } else {
+              // No profile exists yet
+              console.log('No lecturer profile found for user');
+              setProfileExists(false);
+              
+              // Pre-fill with user data if available
+              if (user.name) setDosenValue('nama_dosen', user.name);
+              if (user.email) setDosenValue('email', user.email);
+            }
+          } catch (error) {
+            console.error('Error in dosen profile check:', error);
+            toast({
+              variant: "destructive",
+              title: "Error",
+              description: "Terjadi kesalahan saat memuat profil dosen: " + getErrorMessage(error),
+            });
+            // Continue to show empty form
+            setProfileExists(false);
           }
-        }
-        
-        // If user is tendik or koorpro, no specific profile needed for now
-        if (userRole === 'tendik' || userRole === 'koorpro') {
-          setProfileExists(true); // Assume profile exists for admin users
+        } else if (userRole === 'tendik' || userRole === 'koorpro') {
+          try {
+            console.log('Checking staff profile for user:', user.id);
+            // Simplified query
+            const { data: tendikData, error: tendikError } = await supabase
+              .from('tendiks')
+              .select('id, nama_tendik, nip, email, jabatan')
+              .eq('user_id', user.id)
+              .limit(1);
+            
+            if (tendikError) {
+              console.error('Error fetching staff profile:', tendikError);
+              // For admin users, we'll not show a toast because they might not need a specific profile
+            }
+            
+            if (tendikData && tendikData.length > 0) {
+              // Profile exists, pre-fill the form if needed
+              console.log('Found staff profile:', tendikData[0]);
+              setProfileExists(true);
+              if (userRole === 'tendik') {
+                setTendikValue('nama_tendik', tendikData[0].nama_tendik || '');
+                setTendikValue('nip', tendikData[0].nip || '');
+                setTendikValue('email', tendikData[0].email || '');
+                setTendikValue('jabatan', tendikData[0].jabatan || '');
+              }
+            } else {
+              // For admin roles, we'll assume profile exists even if no specific record found
+              console.log('No staff profile found, but continuing for admin user');
+              setProfileExists(userRole === 'koorpro'); // koorpro doesn't need a specific profile
+              
+              // For tendik, pre-fill with user data if available
+              if (userRole === 'tendik') {
+                if (user.name) setTendikValue('nama_tendik', user.name);
+                if (user.email) setTendikValue('email', user.email);
+              }
+            }
+          } catch (error) {
+            console.error('Error in staff profile check:', error);
+            // For admin users, we'll not show a toast because they might not need a specific profile
+            
+            // Assume profile exists for koorpro even if there's an error
+            setProfileExists(userRole === 'koorpro');
+          }
         }
       } catch (error) {
         console.error('Error checking profile:', error);
         toast({
           variant: "destructive",
           title: "Error",
-          description: "Terjadi kesalahan saat memuat profil.",
+          description: "Terjadi kesalahan saat memuat profil: " + getErrorMessage(error),
         });
       } finally {
         setIsLoading(false);
       }
     };
     
-    checkProfile();
-  }, [user, toast, setStudentValue, setDosenValue]);
+    if (user) {
+      checkProfile();
+    } else {
+      setIsLoading(false);
+    }
+  }, [user, toast, setStudentValue, setDosenValue, setTendikValue]);
   
   // Submit handler for student profile
   const onSubmitStudent = async (data: StudentProfileFormValues) => {
@@ -181,28 +299,26 @@ export default function ProfilePage() {
     
     try {
       setIsSubmitting(true);
+      console.log('Submitting student profile for user:', user.id);
       
       // Check if user already has a mahasiswa profile
       const { data: existingData, error: checkError } = await supabase
         .from('mahasiswas')
         .select('id')
-        .eq('user_id', user.id);
+        .eq('user_id', user.id)
+        .limit(1);
 
       if (checkError) {
-        console.error('Error checking existing profile:', checkError);
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Terjadi kesalahan saat memeriksa profil mahasiswa.",
-        });
-        setIsSubmitting(false);
-        return;
+        throw new Error(getErrorMessage(checkError));
       }
 
-      let operation;
+      console.log('Existing student profile data:', existingData);
+      
+      let result;
       if (existingData && existingData.length > 0) {
-        // Update existing profile
-        operation = supabase
+        // Update existing profile using the id, not user_id to avoid policy issues
+        console.log('Updating existing student profile with ID:', existingData[0].id);
+        result = await supabase
           .from('mahasiswas')
           .update({
             nama: data.nama,
@@ -210,10 +326,11 @@ export default function ProfilePage() {
             email: data.email,
             nomor_telepon: data.nomor_telepon || null,
           })
-          .eq('user_id', user.id);
+          .eq('id', existingData[0].id);
       } else {
         // Insert new profile
-        operation = supabase
+        console.log('Creating new student profile');
+        result = await supabase
           .from('mahasiswas')
           .insert([
             {
@@ -226,16 +343,22 @@ export default function ProfilePage() {
           ]);
       }
 
-      const { error } = await operation;
+      if (result.error) {
+        throw new Error(getErrorMessage(result.error));
+      }
       
-      if (error) {
-        console.error('Error saving student profile:', error);
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Terjadi kesalahan saat menyimpan profil mahasiswa: " + error.message,
-        });
-        return;
+      // Also update the user's profile table to keep data in sync
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update({
+          name: data.nama,
+          username: data.nim,
+        })
+        .eq('id', user.id);
+        
+      if (profileError) {
+        console.error('Error updating profiles table:', profileError);
+        // Continue anyway since the main profile was updated
       }
       
       toast({
@@ -245,14 +368,16 @@ export default function ProfilePage() {
       
       setProfileExists(true);
       
-      // Refresh the page to show the updated profile
-      router.refresh();
+      // Refresh the page after a short delay
+      setTimeout(() => {
+        window.location.reload();
+      }, 1000);
     } catch (error) {
       console.error('Error saving student profile:', error);
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Terjadi kesalahan saat menyimpan profil mahasiswa.",
+        description: "Terjadi kesalahan saat menyimpan profil mahasiswa: " + getErrorMessage(error),
       });
     } finally {
       setIsSubmitting(false);
@@ -265,38 +390,37 @@ export default function ProfilePage() {
     
     try {
       setIsSubmitting(true);
+      console.log('Submitting lecturer profile for user:', user.id);
       
       // Check if user already has a dosen profile
       const { data: existingData, error: checkError } = await supabase
         .from('dosens')
         .select('id')
-        .eq('user_id', user.id);
+        .eq('user_id', user.id)
+        .limit(1);
 
       if (checkError) {
-        console.error('Error checking existing profile:', checkError);
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Terjadi kesalahan saat memeriksa profil dosen.",
-        });
-        setIsSubmitting(false);
-        return;
+        throw new Error(getErrorMessage(checkError));
       }
 
-      let operation;
+      console.log('Existing lecturer profile data:', existingData);
+      
+      let result;
       if (existingData && existingData.length > 0) {
-        // Update existing profile
-        operation = supabase
+        // Update existing profile using id, not user_id
+        console.log('Updating existing lecturer profile with ID:', existingData[0].id);
+        result = await supabase
           .from('dosens')
           .update({
             nama_dosen: data.nama_dosen,
             nip: data.nip,
             email: data.email,
           })
-          .eq('user_id', user.id);
+          .eq('id', existingData[0].id);
       } else {
         // Insert new profile
-        operation = supabase
+        console.log('Creating new lecturer profile');
+        result = await supabase
           .from('dosens')
           .insert([
             {
@@ -308,16 +432,22 @@ export default function ProfilePage() {
           ]);
       }
 
-      const { error } = await operation;
+      if (result.error) {
+        throw new Error(getErrorMessage(result.error));
+      }
       
-      if (error) {
-        console.error('Error saving lecturer profile:', error);
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Terjadi kesalahan saat menyimpan profil dosen: " + error.message,
-        });
-        return;
+      // Also update the user's profile table to keep data in sync
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update({
+          name: data.nama_dosen,
+          username: data.nip,
+        })
+        .eq('id', user.id);
+        
+      if (profileError) {
+        console.error('Error updating profiles table:', profileError);
+        // Continue anyway since the main profile was updated
       }
       
       toast({
@@ -327,14 +457,107 @@ export default function ProfilePage() {
       
       setProfileExists(true);
       
-      // Refresh the page to show the updated profile
-      router.refresh();
+      // Refresh the page after a short delay
+      setTimeout(() => {
+        window.location.reload();
+      }, 1000);
     } catch (error) {
       console.error('Error saving lecturer profile:', error);
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Terjadi kesalahan saat menyimpan profil dosen.",
+        description: "Terjadi kesalahan saat menyimpan profil dosen: " + getErrorMessage(error),
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+  
+  // Submit handler for admin staff profile
+  const onSubmitTendik = async (data: TendikProfileFormValues) => {
+    if (!user) return;
+    
+    try {
+      setIsSubmitting(true);
+      console.log('Submitting staff profile for user:', user.id);
+      
+      // Check if user already has a tendik profile
+      const { data: existingData, error: checkError } = await supabase
+        .from('tendiks')
+        .select('id')
+        .eq('user_id', user.id)
+        .limit(1);
+
+      if (checkError) {
+        throw new Error(getErrorMessage(checkError));
+      }
+
+      console.log('Existing staff profile data:', existingData);
+      
+      let result;
+      if (existingData && existingData.length > 0) {
+        // Update existing profile using id, not user_id
+        console.log('Updating existing staff profile with ID:', existingData[0].id);
+        result = await supabase
+          .from('tendiks')
+          .update({
+            nama_tendik: data.nama_tendik,
+            nip: data.nip,
+            email: data.email,
+            jabatan: data.jabatan,
+          })
+          .eq('id', existingData[0].id);
+      } else {
+        // Insert new profile
+        console.log('Creating new staff profile');
+        result = await supabase
+          .from('tendiks')
+          .insert([
+            {
+              user_id: user.id,
+              nama_tendik: data.nama_tendik,
+              nip: data.nip,
+              email: data.email,
+              jabatan: data.jabatan,
+            }
+          ]);
+      }
+
+      if (result.error) {
+        throw new Error(getErrorMessage(result.error));
+      }
+      
+      // Also update the user's profile table to keep data in sync
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update({
+          name: data.nama_tendik,
+          username: data.nip,
+        })
+        .eq('id', user.id);
+        
+      if (profileError) {
+        console.error('Error updating profiles table:', profileError);
+        // Continue anyway since the main profile was updated
+      }
+      
+      toast({
+        title: "Profil Berhasil Disimpan",
+        description: "Data profil staf berhasil disimpan.",
+      });
+      
+      setProfileExists(true);
+      
+      // Refresh the page after a short delay
+      setTimeout(() => {
+        window.location.reload();
+      }, 1000);
+    } catch (error) {
+      console.error('Error saving staff profile:', error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Terjadi kesalahan saat menyimpan profil staf: " + getErrorMessage(error),
       });
     } finally {
       setIsSubmitting(false);
@@ -530,13 +753,78 @@ export default function ProfilePage() {
         </Card>
       )}
       
-      {(profileRole === 'tendik' || profileRole === 'koorpro') && (
+      {profileRole === 'tendik' && (
         <Card>
           <CardHeader>
-            <CardTitle>Profil Admin</CardTitle>
+            <CardTitle>Profil Staf</CardTitle>
+          </CardHeader>
+          <form onSubmit={handleSubmitTendik(onSubmitTendik)}>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="nama_tendik">Nama Lengkap</Label>
+                <Input 
+                  id="nama_tendik" 
+                  placeholder="Masukkan nama lengkap" 
+                  {...registerTendik('nama_tendik')} 
+                />
+                {tendikErrors.nama_tendik && (
+                  <p className="text-red-500 text-xs mt-1">{tendikErrors.nama_tendik.message}</p>
+                )}
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="nip">NIP</Label>
+                <Input 
+                  id="nip" 
+                  placeholder="Masukkan NIP" 
+                  {...registerTendik('nip')} 
+                />
+                {tendikErrors.nip && (
+                  <p className="text-red-500 text-xs mt-1">{tendikErrors.nip.message}</p>
+                )}
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="email">Email</Label>
+                <Input 
+                  id="email" 
+                  type="email" 
+                  placeholder="Masukkan email" 
+                  {...registerTendik('email')} 
+                />
+                {tendikErrors.email && (
+                  <p className="text-red-500 text-xs mt-1">{tendikErrors.email.message}</p>
+                )}
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="jabatan">Jabatan (opsional)</Label>
+                <Input 
+                  id="jabatan" 
+                  placeholder="Masukkan jabatan" 
+                  {...registerTendik('jabatan')} 
+                />
+                {tendikErrors.jabatan && (
+                  <p className="text-red-500 text-xs mt-1">{tendikErrors.jabatan.message}</p>
+                )}
+              </div>
+            </CardContent>
+            <CardFooter>
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting ? 'Menyimpan...' : 'Simpan Profil'}
+              </Button>
+            </CardFooter>
+          </form>
+        </Card>
+      )}
+      
+      {profileRole === 'koorpro' && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Profil Koordinator Program</CardTitle>
           </CardHeader>
           <CardContent>
-            <p>Tidak ada data profil khusus yang perlu dilengkapi untuk akun admin.</p>
+            <p>Sebagai Koordinator Program, Anda memiliki akses ke semua fitur administrasi sistem. Tidak ada data profil tambahan yang perlu dilengkapi.</p>
           </CardContent>
         </Card>
       )}

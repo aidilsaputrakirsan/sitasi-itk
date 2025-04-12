@@ -59,11 +59,14 @@ export default function DashboardLayout({
   const router = useRouter();
 
   // Add more detailed debugging
-  console.log("Dashboard layout rendering, auth state:", {
-    userExists: !!user,
-    isLoading,
-    roles: user?.roles || []
-  });
+  useEffect(() => {
+    console.log("Dashboard layout rendering, auth state:", {
+      userExists: !!user,
+      isLoading,
+      userId: user?.id,
+      roles: user?.roles || []
+    });
+  }, [user, isLoading]);
 
   useEffect(() => {
     // Check if the user is not authenticated and auth is not loading
