@@ -65,79 +65,109 @@ export default function PengajuanDetailPage({ params }: { params: { id: string }
       setUserRole('mahasiswa');
     }
   }, [user]);
+
+  useEffect(() => {
+    if (pengajuan) {
+      console.log("Pengajuan data loaded:", pengajuan);
+      console.log("Current user role:", userRole);
+      console.log("Is user pembimbing1:", isPembimbing1);
+      console.log("Is user pembimbing2:", isPembimbing2);
+    }
+  }, [pengajuan, userRole, isPembimbing1, isPembimbing2]);
   
   
-  const handleApprove = async (isFirstSupervisor: boolean) => {
-    if (!pengajuan || !user?.id) return;
-    
-    setIsProcessing(true);
-    console.log("Starting approval process with params:", {
-      id: pengajuan.id,
-      isFirstSupervisor,
-      dosenId: user.id
+  // In app/dashboard/pengajuan/[id]/page.tsx - Update the handleApprove function
+
+const handleApprove = async () => {
+  if (!pengajuan || !user?.id) return;
+  
+  setIsProcessing(true);
+  console.log("Starting approval with user:", user.id, "and pengajuan:", pengajuan.id);
+  
+  try {
+    // Debug untuk memeriksa struktur pengajuan dan status isPembimbing
+    console.log("Debug approving proposal:", {
+      pengajuanId: pengajuan.id,
+      status: pengajuan.status,
+      isPembimbing1,
+      isPembimbing2,
+      approve_pembimbing1: pengajuan.approve_pembimbing1,
+      approve_pembimbing2: pengajuan.approve_pembimbing2
     });
     
-    try {
-      // Debug Supabase connection
-      const { data: testData } = await supabase.from('pengajuan_tas').select('id').limit(1);
-      console.log("Supabase connection test:", testData);
+    // Get mahasiswa user_id for notification
+    const { data: mahasiswaInfo, error: mahasiswaError } = await supabase
+      .from('mahasiswas')
+      .select('user_id')
+      .eq('id', pengajuan.mahasiswa_id)
+      .single();
       
-      // Get mahasiswa user_id for notification
-      const { data: mahasiswaInfo, error: mahasiswaError } = await supabase
-        .from('mahasiswas')
-        .select('user_id, nama')
-        .eq('id', pengajuan.mahasiswa_id)
-        .single();
-        
-      if (mahasiswaError) {
-        console.error('Error fetching mahasiswa:', mahasiswaError);
-        throw new Error('Gagal mendapatkan informasi mahasiswa');
-      }
-      
-      console.log("Approve data preparation:", {
-        pengajuanId: pengajuan.id,
-        isPembimbing1: isFirstSupervisor, 
-        dosenId: user.id,
-        mahasiswaId: mahasiswaInfo.user_id
-      });
-      
-      // Call the mutation with detailed error handling
-      approvePengajuan({
-        id: pengajuan.id,
-        isPembimbing1: isFirstSupervisor,
-        dosenId: user.id,
-        mahasiswaId: mahasiswaInfo.user_id
-      }, {
-        onSuccess: () => {
-          toast({
-            title: "Berhasil",
-            description: "Pengajuan tugas akhir telah disetujui.",
-          });
-          setIsProcessing(false);
-          
-          // Reload page after short delay
-          setTimeout(() => window.location.reload(), 1500);
-        },
-        onError: (error: any) => {
-          console.error('Full approval error:', error);
-          toast({
-            variant: "destructive",
-            title: "Error",
-            description: error.message || "Terjadi kesalahan saat menyetujui."
-          });
-          setIsProcessing(false);
-        }
-      });
-    } catch (error: any) {
-      console.error('Error in approval handler:', error);
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: error.message || "Terjadi kesalahan saat proses persetujuan."
-      });
-      setIsProcessing(false);
+    if (mahasiswaError) {
+      console.error('Error fetching mahasiswa:', mahasiswaError);
+      throw new Error('Gagal mendapatkan informasi mahasiswa');
     }
-  };
+    
+    // IMPORTANT: Create a history record first regardless of approval outcome
+    // This helps ensure there's always history data for all roles to see
+    const { error: historyError } = await supabase
+      .from('riwayat_pengajuans')
+      .insert([{
+        pengajuan_ta_id: pengajuan.id,
+        user_id: user.id,
+        riwayat: isPembimbing1 ? 'Pemeriksaan oleh Pembimbing 1' : 'Pemeriksaan oleh Pembimbing 2',
+        keterangan: 'Proposal sedang diperiksa',
+        status: 'processing',
+      }]);
+    
+    if (historyError) {
+      console.error('Error creating initial history record:', historyError);
+      // Continue even if this fails
+    }
+    
+    // Call the mutation with detailed logging
+    console.log("Calling approvePengajuan with params:", {
+      id: pengajuan.id,
+      isPembimbing1,
+      dosenId: user.id,
+      mahasiswaId: mahasiswaInfo.user_id
+    });
+    
+    approvePengajuan({
+      id: pengajuan.id,
+      isPembimbing1,
+      dosenId: user.id,
+      mahasiswaId: mahasiswaInfo.user_id
+    }, {
+      onSuccess: () => {
+        toast({
+          title: "Berhasil",
+          description: "Pengajuan tugas akhir telah disetujui.",
+        });
+        setIsProcessing(false);
+        
+        // Reload page after short delay
+        setTimeout(() => window.location.reload(), 1500);
+      },
+      onError: (error: any) => {
+        console.error('Full approval error:', error);
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: error.message || "Terjadi kesalahan saat menyetujui."
+        });
+        setIsProcessing(false);
+      }
+    });
+  } catch (error: any) {
+    console.error('Error in approval handler:', error);
+    toast({
+      variant: "destructive",
+      title: "Error",
+      description: error.message || "Terjadi kesalahan saat proses persetujuan."
+    });
+    setIsProcessing(false);
+  }
+};
   
   const handleReject = async (isFirstSupervisor: boolean, reason: string) => {
     if (!pengajuan || !user?.id || !reason) return;
@@ -342,6 +372,8 @@ export default function PengajuanDetailPage({ params }: { params: { id: string }
         <p className="mt-1 text-sm text-gray-500">
           Lihat detail dan status pengajuan tugas akhir
         </p>
+        {/* Add this to debug the pengajuan id */}
+        <p className="hidden text-xs text-gray-400">ID: {pengajuan.id}</p>
       </div>
       
       <PengajuanTADetail 

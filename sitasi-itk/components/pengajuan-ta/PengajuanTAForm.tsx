@@ -1,6 +1,4 @@
-// components/pengajuan-ta/PengajuanTAForm.tsx
-'use client';
-
+// Updated PengajuanTAForm.tsx to fix foreign key constraints issue
 import React, { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -44,6 +42,7 @@ export function PengajuanTAForm({
     handleSubmit,
     formState: { errors },
     watch,
+    setValue,
   } = useForm<PengajuanTAFormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: defaultValues || {
@@ -54,7 +53,20 @@ export function PengajuanTAForm({
     }
   });
 
+  // When editing, ensure we use the correct default values
+  useEffect(() => {
+    if (isEditing && defaultValues) {
+      console.log("Setting default values for editing:", defaultValues);
+      setValue('judul', defaultValues.judul || '');
+      setValue('bidang_penelitian', defaultValues.bidang_penelitian || '');
+      setValue('pembimbing_1', defaultValues.pembimbing_1 || '');
+      setValue('pembimbing_2', defaultValues.pembimbing_2 || '');
+    }
+  }, [isEditing, defaultValues, setValue]);
+
   const handleFormSubmit = (data: PengajuanTAFormValues) => {
+    // Log the form data being submitted
+    console.log("Submitting form data:", data);
     onSubmit(data);
   };
 
@@ -74,6 +86,13 @@ export function PengajuanTAForm({
     "Cybersecurity",
     "Human-Computer Interaction"
   ];
+
+  // Log the current dosens data to help debug
+  useEffect(() => {
+    if (dosens) {
+      console.log("Available dosens:", dosens);
+    }
+  }, [dosens]);
 
   return (
     <Card className="w-full">
@@ -119,11 +138,16 @@ export function PengajuanTAForm({
               {isLoadingDosens ? (
                 <Option value="" disabled>Loading...</Option>
               ) : dosens?.map(dosen => (
-                <Option key={dosen.id} value={dosen.id}>
+                <Option key={dosen.id} value={dosen.user_id}>
                   {dosen.nama_dosen} - {dosen.nip}
                 </Option>
               ))}
             </Select>
+            {isEditing && (
+              <p className="text-xs text-amber-600 mt-1">
+                Perhatian: Mengubah pembimbing akan mereset status persetujuan
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -136,12 +160,17 @@ export function PengajuanTAForm({
               <Option value="">Pilih pembimbing 2</Option>
               {isLoadingDosens ? (
                 <Option value="" disabled>Loading...</Option>
-              ) : dosens?.filter(dosen => dosen.id !== pembimbing1).map(dosen => (
-                <Option key={dosen.id} value={dosen.id}>
+              ) : dosens?.filter(dosen => dosen.user_id !== pembimbing1).map(dosen => (
+                <Option key={dosen.id} value={dosen.user_id}>
                   {dosen.nama_dosen} - {dosen.nip}
                 </Option>
               ))}
             </Select>
+            {isEditing && (
+              <p className="text-xs text-amber-600 mt-1">
+                Perhatian: Mengubah pembimbing akan mereset status persetujuan
+              </p>
+            )}
           </div>
         </CardContent>
         <CardFooter className="flex justify-between">

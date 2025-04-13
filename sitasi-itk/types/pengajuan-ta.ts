@@ -1,12 +1,10 @@
 // types/pengajuan-ta.ts
 
 export type StatusPengajuan = 
-  | 'submitted' // Submitted but not yet approved
-  | 'approved_pembimbing1' // Approved by first supervisor
-  | 'approved_pembimbing2' // Approved by second supervisor
-  | 'approved' // Approved by both supervisors
-  | 'revision' // Needs revision
-  | 'rejected' // Rejected
+  | 'submitted'  // Submitted but not yet approved
+  | 'approved'   // Approved by both supervisors
+  | 'revision'   // Needs revision
+  | 'rejected'   // Rejected
   | 'completed'; // Completed
 
 export interface PengajuanTA {

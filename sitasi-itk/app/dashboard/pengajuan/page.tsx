@@ -4,7 +4,12 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { PengajuanTAList } from '@/components/pengajuan-ta/PengajuanTAList';
-import { useStudentPengajuanTA, useSupervisorPengajuanTA, usePengajuanTAs } from '@/hooks/usePengajuanTA';
+import { 
+  useStudentPengajuanTA, 
+  useSupervisorPengajuanTA, 
+  usePengajuanTAs,
+  usePengajuanTAByStudentUserId 
+} from '@/hooks/usePengajuanTA';
 import { useMahasiswaByUserId } from '@/hooks/useMahasiswas';
 import { useDosenByUserId } from '@/hooks/useDosens';
 import { UserRole } from '@/types/auth';
@@ -21,6 +26,9 @@ export default function PengajuanPage() {
   const [mahasiswaId, setMahasiswaId] = useState<string>('');
   const [dosenId, setDosenId] = useState<string>('');
   const [showDebugInfo, setShowDebugInfo] = useState(false);
+  
+  // Fetch data by user ID directly (untuk mahasiswa)
+  const { data: pengajuanByUserId } = usePengajuanTAByStudentUserId(user?.id || '');
   
   // Fetch mahasiswa data if user is a student
   const { data: mahasiswaData } = useMahasiswaByUserId(
@@ -104,8 +112,6 @@ export default function PengajuanPage() {
   const { data: supervisorPengajuan, isLoading: isLoadingSupervisorData } = useSupervisorPengajuanTA(
     userRole === 'dosen' ? dosenId : ''
   );
-
-  const { data: pengajuanByUserId } = usePengajuanTAByStudentUserId(user?.id || '');
   
   const { data: allPengajuan, isLoading: isLoadingAllData } = usePengajuanTAs();
   
@@ -145,17 +151,17 @@ export default function PengajuanPage() {
     setShowDebugInfo(!showDebugInfo);
   };
   
-  // Render different content based on role
-  const renderContent = () => {
-    if (userRole === 'mahasiswa') {
-      return (
+  return (
+    <div>
+      {/* Header for mahasiswa */}
+      {userRole === 'mahasiswa' && (
         <div className="mb-4 flex justify-between items-center">
           <h1 className="text-2xl font-semibold text-gray-900">Pengajuan Tugas Akhir</h1>
-          {/* Only show one button - REMOVED REDUNDANT BUTTONS */}
         </div>
-      );
-    } else if (userRole === 'dosen') {
-      return (
+      )}
+      
+      {/* Dosen Specific View with Tabs */}
+      {userRole === 'dosen' && (
         <Tabs defaultValue="pending" className="w-full">
           <div className="mb-4 flex justify-between items-center">
             <h1 className="text-2xl font-semibold text-gray-900">Pengajuan Tugas Akhir Mahasiswa</h1>
@@ -211,25 +217,60 @@ export default function PengajuanPage() {
             </Card>
           </TabsContent>
         </Tabs>
-      );
-    } else {
-      return (
+      )}
+      
+      {/* Admin header */}
+      {(userRole === 'tendik' || userRole === 'koorpro') && (
         <div className="mb-6">
           <h1 className="text-2xl font-semibold text-gray-900">Pengajuan Tugas Akhir</h1>
           <p className="mt-1 text-sm text-gray-500">
             Kelola pengajuan tugas akhir mahasiswa
           </p>
         </div>
-      );
-    }
-  };
-  
-  return (
-    <div>
-      {renderContent()}
+      )}
       
-      const { data: pengajuanByUserId } = usePengajuanTAByStudentUserId(user?.id || '');
+      {/* Mahasiswa Content */}
+      {userRole === 'mahasiswa' && (
+        <>
+          <div className="flex justify-end mb-4">
+            <Button asChild>
+              <Link href="/dashboard/pengajuan/create">
+                <PlusCircle className="h-4 w-4 mr-2" />
+                Ajukan Tugas Akhir
+              </Link>
+            </Button>
+          </div>
+          
+          <PengajuanTAList 
+            pengajuanList={pengajuanByUserId || []} 
+            userRole={userRole}
+            isLoading={isLoading()} 
+          />
+          
+          {/* Debug button */}
+          <div className="mt-8 text-right">
+            <button 
+              onClick={toggleDebugInfo} 
+              className="text-xs text-gray-400 hover:text-gray-600"
+            >
+              {showDebugInfo ? 'Hide Debug Info' : 'Show Debug Info'}
+            </button>
+          </div>
+          
+          {/* Debug information */}
+          {showDebugInfo && (
+            <div className="mt-2 p-4 bg-gray-100 rounded-md text-xs font-mono">
+              <div>User ID: {user?.id || 'Not set'}</div>
+              <div>User Roles: {user?.roles?.join(', ') || 'None'}</div>
+              <div>Mahasiswa ID: {mahasiswaId || 'Not set'}</div>
+              <div>Data Count from mahasiswaId: {studentPengajuan?.length || 0}</div>
+              <div>Data Count from userId: {pengajuanByUserId?.length || 0}</div>
+            </div>
+          )}
+        </>
+      )}
       
+      {/* Admin Content */}
       {(userRole === 'tendik' || userRole === 'koorpro') && (
         <PengajuanTAList 
           pengajuanList={getPengajuanData()} 

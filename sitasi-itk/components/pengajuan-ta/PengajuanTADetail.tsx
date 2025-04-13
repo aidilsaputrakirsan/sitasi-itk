@@ -16,6 +16,7 @@ import {
 import { useRiwayatPengajuan } from '@/hooks/usePengajuanTA';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
+import { useEffect } from 'react';
 
 // Simple Separator replacement
 const Separator = () => <div className="h-[1px] w-full bg-gray-200 my-4"></div>;
@@ -102,6 +103,17 @@ export function PengajuanTADetail({
   const hasApproved = isPembimbing1 ? pengajuan.approve_pembimbing1 : 
                       isPembimbing2 ? pengajuan.approve_pembimbing2 : false;
 
+                      useEffect(() => {
+                        console.log("Pembimbing status:", {
+                          isPembimbing1, 
+                          isPembimbing2,
+                          approve_pembimbing1: pengajuan.approve_pembimbing1,
+                          approve_pembimbing2: pengajuan.approve_pembimbing2,
+                          isApprovable,
+                          hasApproved
+                        });
+                      }, [isPembimbing1, isPembimbing2, pengajuan.approve_pembimbing1, pengajuan.approve_pembimbing2, isApprovable, hasApproved]);
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
       <div className="md:col-span-2">
@@ -151,7 +163,7 @@ export function PengajuanTADetail({
                     </AvatarFallback>
                   </Avatar>
                   <div>
-                    <p className="font-medium">{pengajuan.dosen_pembimbing1?.nama_dosen}</p>
+                    <p className="font-medium"> {pengajuan.dosen_pembimbing1?.nama_dosen || 'Pembimbing 1'}</p>
                     <p className="text-sm text-gray-500">Pembimbing 1</p>
                   </div>
                 </div>
@@ -176,7 +188,7 @@ export function PengajuanTADetail({
                     </AvatarFallback>
                   </Avatar>
                   <div>
-                    <p className="font-medium">{pengajuan.dosen_pembimbing2?.nama_dosen}</p>
+                    <p className="font-medium"> {pengajuan.dosen_pembimbing2?.nama_dosen || 'Pembimbing 2'}</p>
                     <p className="text-sm text-gray-500">Pembimbing 2</p>
                   </div>
                 </div>
@@ -193,7 +205,24 @@ export function PengajuanTADetail({
                 )}
               </div>
             </div>
+
           </CardContent>
+          {/* Debug panel untuk approval */}
+            {/* Debug panel removed
+              {isPembimbing1 || isPembimbing2 ? (
+                <div className="mt-4 p-2 bg-gray-50 rounded text-xs">
+                  <p>Status Approval Debug:</p>
+                  <ul className="list-disc pl-4 mt-1">
+                    <li>Role: {isPembimbing1 ? "Pembimbing 1" : "Pembimbing 2"}</li>
+                    <li>Approval Status: {isPembimbing1 ? 
+                      (pengajuan.approve_pembimbing1 ? "Sudah disetujui" : "Belum disetujui") : 
+                      (pengajuan.approve_pembimbing2 ? "Sudah disetujui" : "Belum disetujui")}</li>
+                    <li>IsApprovable: {isApprovable ? "Ya" : "Tidak"}</li>
+                    <li>hasApproved: {hasApproved ? "Ya" : "Tidak"}</li>
+                  </ul>
+                </div>
+              ) : null}
+              */}
           <CardFooter className="flex flex-wrap gap-2">
             {userRole === 'mahasiswa' && pengajuan.status !== 'approved' && (
               <Button variant="outline" asChild>
@@ -264,17 +293,18 @@ export function PengajuanTADetail({
       </div>
       
       <div>
-        <Card>
-          <CardHeader>
-            <div className="flex items-center">
-              <History className="h-5 w-5 mr-2" />
-              <CardTitle className="text-base">Riwayat Pengajuan</CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="max-h-[300px] overflow-y-auto pr-4">
-              <div className="space-y-4">
-                {riwayat?.map((item) => (
+      <Card>
+        <CardHeader>
+          <div className="flex items-center">
+            <History className="h-5 w-5 mr-2" />
+            <CardTitle className="text-base">Riwayat Pengajuan</CardTitle>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="max-h-[300px] overflow-y-auto pr-4">
+            <div className="space-y-4">
+              {riwayat && riwayat.length > 0 ? (
+                riwayat.map((item) => (
                   <div key={item.id} className="border-l-2 border-gray-200 pl-4 py-1">
                     <div className="flex justify-between items-start">
                       <p className="font-medium text-sm">{item.riwayat}</p>
@@ -286,18 +316,24 @@ export function PengajuanTADetail({
                       <span>{formatDate(item.created_at)}</span>
                     </div>
                   </div>
-                ))}
-                
-                {!riwayat?.length && (
+                ))
+              ) : (
+                <div>
                   <p className="text-sm text-gray-500 text-center py-4">
                     Belum ada riwayat pengajuan
                   </p>
-                )}
-              </div>
+                  {process.env.NODE_ENV === 'development' && (
+                    <p className="text-xs text-gray-400 text-center mt-2">
+                      Pengajuan ID: {pengajuan.id}
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
-          </CardContent>
-        </Card>
-      </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
       
       {/* Reject Modal */}
       {showRejectModal && (
