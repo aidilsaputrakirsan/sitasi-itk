@@ -12,14 +12,7 @@ import { UserRole } from '@/types/auth';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 
-// Tambahkan interface untuk PageProps
-interface PageProps {
-  params: {
-    id: string;
-  };
-}
-
-// Tetap pertahankan komponen UI temporary
+// Define interfaces for our temporary components
 interface AlertDialogProps {
   children: ReactNode;
   open: boolean;
@@ -70,7 +63,8 @@ interface LabelProps {
   children: ReactNode;
 }
 
-// Komponen UI temporary tetap sama
+// TEMPORARY SOLUTION: Instead of importing the missing UI components,
+// we'll use basic HTML elements with proper TypeScript interfaces
 const AlertDialog = ({ children, open, onOpenChange }: AlertDialogProps) => (
   open ? <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center">
     <div className="bg-white p-6 rounded-lg max-w-md w-full">
@@ -102,6 +96,7 @@ const AlertDialogAction = ({ children, onClick, disabled }: AlertDialogActionPro
   </button>
 );
 
+// Textarea replacement
 const Textarea = ({ id, placeholder, value, onChange, className }: TextareaProps) => (
   <textarea
     id={id}
@@ -112,13 +107,14 @@ const Textarea = ({ id, placeholder, value, onChange, className }: TextareaProps
   />
 );
 
+// Label replacement
 const Label = ({ htmlFor, children }: LabelProps) => (
   <label htmlFor={htmlFor} className="block text-sm font-medium text-gray-700 mb-1">
     {children}
   </label>
 );
 
-export default function PengajuanDetailPage({ params }: PageProps) {
+export default function PengajuanDetailPage({ params }: { params: { id: string } }) {
   const router = useRouter();
   const { user } = useAuth();
   const { toast } = useToast();
@@ -132,19 +128,23 @@ export default function PengajuanDetailPage({ params }: PageProps) {
   const [isPembimbing1, setIsPembimbing1] = useState(false);
   const [isPembimbing2, setIsPembimbing2] = useState(false);
   
+  // Dialog states
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [showRevisionDialog, setShowRevisionDialog] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   const [revisionNotes, setRevisionNotes] = useState('');
   
+  // Fetch mahasiswa data if user is a student
   const { data: mahasiswaData } = useMahasiswaByUserId(
     user?.roles.includes('mahasiswa') ? user.id : ''
   );
   
+  // Fetch dosen data if user is a lecturer
   const { data: dosenData } = useDosenByUserId(
     user?.roles.includes('dosen') ? user.id : ''
   );
   
+  // Set mahasiswaId, dosenId, and check if user is pembimbing 1 or 2
   useEffect(() => {
     if (mahasiswaData) {
       setMahasiswaId(mahasiswaData.id);
@@ -157,6 +157,7 @@ export default function PengajuanDetailPage({ params }: PageProps) {
     }
   }, [mahasiswaData, dosenData, pengajuan]);
   
+  // Set user role
   useEffect(() => {
     if (user?.roles.includes('koorpro')) {
       setUserRole('koorpro');
@@ -191,7 +192,18 @@ export default function PengajuanDetailPage({ params }: PageProps) {
       userId: dosenId
     }, {
       onSuccess: () => {
+        // Add rejection reason to riwayat_pengajuans
+        updatePengajuan({
+          id: pengajuan.id,
+          data: {}, // No need to update pengajuan_ta again
+          userId: dosenId,
+          // Pass rejection reason as extra information to the hook
+          // We'll modify the hook to handle this properly
+        });
+        
+        // Create a separate function to add the rejection reason to riwayat_pengajuans
         addRiwayatPengajuan(pengajuan.id, dosenId, 'Ditolak', `Ditolak dengan alasan: ${rejectReason}`);
+        
         setShowRejectDialog(false);
         setRejectReason('');
         
@@ -214,7 +226,9 @@ export default function PengajuanDetailPage({ params }: PageProps) {
       userId: dosenId
     }, {
       onSuccess: () => {
+        // Add revision notes to riwayat_pengajuans separately
         addRiwayatPengajuan(pengajuan.id, dosenId, 'Revisi', `Perlu revisi: ${revisionNotes}`);
+        
         setShowRevisionDialog(false);
         setRevisionNotes('');
         
@@ -226,6 +240,7 @@ export default function PengajuanDetailPage({ params }: PageProps) {
     });
   };
   
+  // Helper function to add riwayat_pengajuan separately
   const addRiwayatPengajuan = async (pengajuanId: string, userId: string, riwayat: string, keterangan: string) => {
     try {
       const { supabase } = await import('@/lib/supabase');
@@ -284,6 +299,7 @@ export default function PengajuanDetailPage({ params }: PageProps) {
         onRevision={() => setShowRevisionDialog(true)}
       />
       
+      {/* Reject Dialog */}
       <AlertDialog open={showRejectDialog} onOpenChange={setShowRejectDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -314,6 +330,7 @@ export default function PengajuanDetailPage({ params }: PageProps) {
         </AlertDialogContent>
       </AlertDialog>
       
+      {/* Revision Dialog */}
       <AlertDialog open={showRevisionDialog} onOpenChange={setShowRevisionDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
