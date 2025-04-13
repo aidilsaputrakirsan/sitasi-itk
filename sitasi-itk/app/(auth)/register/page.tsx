@@ -9,12 +9,13 @@ import { z } from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 
+// Updated schema to only include allowed roles for public registration
 const registerSchema = z.object({
   name: z.string().min(3, 'Nama minimal 3 karakter'),
   email: z.string().email('Email tidak valid'),
   username: z.string().min(3, 'Username minimal 3 karakter'),
   password: z.string().min(6, 'Password minimal 6 karakter'),
-  role: z.enum(['mahasiswa', 'dosen', 'tendik', 'koorpro'] as const),
+  role: z.enum(['mahasiswa', 'dosen'] as const), // Removed tendik and koorpro
 });
 
 type RegisterFormValues = z.infer<typeof registerSchema>;
@@ -150,8 +151,7 @@ export default function RegisterPage() {
               >
                 <option value="mahasiswa">Mahasiswa</option>
                 <option value="dosen">Dosen</option>
-                <option value="tendik">Tendik</option>
-                <option value="koorpro">Koordinator Program</option>
+                {/* Admin roles removed from dropdown */}
               </select>
               {errors.role && (
                 <p className="text-red-500 text-xs mt-1">{errors.role.message}</p>
