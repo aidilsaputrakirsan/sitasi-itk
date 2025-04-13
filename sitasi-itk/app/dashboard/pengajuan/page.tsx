@@ -104,6 +104,8 @@ export default function PengajuanPage() {
   const { data: supervisorPengajuan, isLoading: isLoadingSupervisorData } = useSupervisorPengajuanTA(
     userRole === 'dosen' ? dosenId : ''
   );
+
+  const { data: pengajuanByUserId } = usePengajuanTAByStudentUserId(user?.id || '');
   
   const { data: allPengajuan, isLoading: isLoadingAllData } = usePengajuanTAs();
   
@@ -226,45 +228,7 @@ export default function PengajuanPage() {
     <div>
       {renderContent()}
       
-      {userRole === 'mahasiswa' && (
-        <>
-          <div className="flex justify-end mb-4">
-            {/* Show only one button */}
-            <Button asChild>
-              <Link href="/dashboard/pengajuan/create">
-                <PlusCircle className="h-4 w-4 mr-2" />
-                Ajukan Tugas Akhir
-              </Link>
-            </Button>
-          </div>
-          
-          <PengajuanTAList 
-            pengajuanList={getPengajuanData()} 
-            userRole={userRole}
-            isLoading={isLoading()} 
-          />
-          
-          {/* Debug button */}
-          <div className="mt-8 text-right">
-            <button 
-              onClick={toggleDebugInfo} 
-              className="text-xs text-gray-400 hover:text-gray-600"
-            >
-              {showDebugInfo ? 'Hide Debug Info' : 'Show Debug Info'}
-            </button>
-          </div>
-          
-          {/* Debug information */}
-          {showDebugInfo && (
-            <div className="mt-2 p-4 bg-gray-100 rounded-md text-xs font-mono">
-              <div>User ID: {user?.id || 'Not set'}</div>
-              <div>Mahasiswa ID: {mahasiswaId || 'Not set'}</div>
-              <div>Data Count: {studentPengajuan?.length || 0}</div>
-              <div>Data: {JSON.stringify(studentPengajuan, null, 2)}</div>
-            </div>
-          )}
-        </>
-      )}
+      const { data: pengajuanByUserId } = usePengajuanTAByStudentUserId(user?.id || '');
       
       {(userRole === 'tendik' || userRole === 'koorpro') && (
         <PengajuanTAList 

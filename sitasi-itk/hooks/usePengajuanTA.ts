@@ -142,24 +142,46 @@ export function usePengajuanTADetail(id: string) {
   return useQuery({
     queryKey: ['pengajuan-ta', id],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('pengajuan_tas')
-        .select(`
-          *,
-          mahasiswa:mahasiswa_id (nama, nim, email, nomor_telepon),
-          dosen_pembimbing1:pembimbing_1 (nama_dosen, nip, email),
-          dosen_pembimbing2:pembimbing_2 (nama_dosen, nip, email)
-        `)
-        .eq('id', id)
-        .single();
+      console.log("Fetching proposal with ID:", id);
       
-      if (error) throw error;
-      return data as PengajuanTA;
+      try {
+        // Coba query dasar dulu
+        const { data: basicData, error: basicError } = await supabase
+          .from('pengajuan_tas')
+          .select('*')
+          .eq('id', id)
+          .single();
+          
+        if (basicError) {
+          console.error("Basic query error:", basicError);
+          throw basicError;
+        }
+        
+        console.log("Basic data found:", basicData);
+        
+        // Kemudian ambil data mahasiswa dan dosen terpisah
+        const mahasiswaPromise = supabase
+          .from('mahasiswas')
+          .select('*')
+          .eq('id', basicData.mahasiswa_id)
+          .single();
+          
+        // Buat objek lengkap
+        const result = {
+          ...basicData,
+          mahasiswa: (await mahasiswaPromise).data,
+          // Tambahkan informasi dosen secara manual jika perlu
+        };
+        
+        return result as PengajuanTA;
+      } catch (error) {
+        console.error("Error in detail fetch:", error);
+        throw error;
+      }
     },
     enabled: !!id,
   });
 }
-
 // Create a new thesis proposal
 // This function assumes the foreign key constraint expects user_id values, not dosen.id values
   // Updated useCreatePengajuanTA with foreign key fix
@@ -390,104 +412,97 @@ export function useApprovePengajuanTA() {
     mutationFn: async ({ 
       id, 
       isPembimbing1, 
-      dosenId, // This is now the user's auth ID
-      mahasiswaId // This is also the student's auth ID (user_id)
+      dosenId, 
+      mahasiswaId
     }: { 
       id: string, 
       isPembimbing1: boolean, 
-      dosenId: string, // Changed meaning
-      mahasiswaId: string // Changed meaning
+      dosenId: string,
+      mahasiswaId: string
     }) => {
       try {
-        console.log(`Starting approval process for pengajuan ${id} by dosen ${dosenId}`);
+        console.log(`Starting approval process with params:`, {id, isPembimbing1, dosenId, mahasiswaId});
         
-        // Get current state first
+        // Get current state first to check other approvals
         const { data: current, error: fetchError } = await supabase
           .from('pengajuan_tas')
-          .select('*')
+          .select('approve_pembimbing1, approve_pembimbing2')
           .eq('id', id)
           .single();
           
         if (fetchError) {
-          console.error('Error fetching current pengajuan state:', fetchError);
+          console.error('Error fetching current state:', fetchError);
           throw fetchError;
         }
         
         // Prepare update data
-        const updateData: Partial<PengajuanTA> = isPembimbing1 
+        const updateData = isPembimbing1 
           ? { approve_pembimbing1: true } 
           : { approve_pembimbing2: true };
         
-        // Check if both will be approved
-        const bothApproved = isPembimbing1 
-          ? (current.approve_pembimbing2 === true)
-          : (current.approve_pembimbing1 === true);
+        // Set status based on both approvals
+        const willBothBeApproved = isPembimbing1 
+          ? current.approve_pembimbing2 === true
+          : current.approve_pembimbing1 === true;
           
-        if (bothApproved) {
+        if (willBothBeApproved) {
           updateData.status = 'approved';
         } else {
           updateData.status = isPembimbing1 ? 'approved_pembimbing1' : 'approved_pembimbing2';
         }
         
-        console.log(`Updating pengajuan with: ${JSON.stringify(updateData)}`);
+        console.log(`Updating pengajuan with:`, updateData);
         
-        // Update the proposal
-        const { error } = await supabase
+        // Update the proposal - log entire request for debugging
+        const updateResult = await supabase
           .from('pengajuan_tas')
           .update(updateData)
           .eq('id', id);
           
-        if (error) {
-          console.error('Error updating pengajuan:', error);
-          throw error;
+        if (updateResult.error) {
+          console.error('Error updating pengajuan:', updateResult.error);
+          throw updateResult.error;
         }
         
-        // Add record to riwayat_pengajuans
-        console.log(`Adding approval history by dosen ${dosenId}`);
-        const { error: historyError } = await supabase
+        console.log('Update successful:', updateResult);
+        
+        // Add history record
+        const historyResult = await supabase
           .from('riwayat_pengajuans')
-          .insert([
-            {
-              pengajuan_ta_id: id,
-              user_id: dosenId,
-              riwayat: isPembimbing1 ? 'Disetujui Pembimbing 1' : 'Disetujui Pembimbing 2',
-              keterangan: isPembimbing1 
-                ? 'Proposal telah disetujui oleh Pembimbing 1' 
-                : 'Proposal telah disetujui oleh Pembimbing 2',
-              status: updateData.status,
-            }
-          ]);
+          .insert([{
+            pengajuan_ta_id: id,
+            user_id: dosenId,
+            riwayat: isPembimbing1 ? 'Disetujui Pembimbing 1' : 'Disetujui Pembimbing 2',
+            keterangan: isPembimbing1 
+              ? 'Proposal telah disetujui oleh Pembimbing 1' 
+              : 'Proposal telah disetujui oleh Pembimbing 2',
+            status: updateData.status,
+          }]);
           
-        if (historyError) {
-          console.error('Error creating approval history:', historyError);
-          throw historyError;
+        if (historyResult.error) {
+          console.error('Error adding history:', historyResult.error);
         }
         
-        // Create notification for student
-        console.log(`Sending approval notification to student ${mahasiswaId}`);
-        const { error: notifError } = await supabase
+        // Send notification
+        const notifResult = await supabase
           .from('notifikasis')
-          .insert([
-            {
-              from_user: dosenId,
-              to_user: mahasiswaId,
-              judul: isPembimbing1 ? 'Pembimbing 1 menyetujui proposal' : 'Pembimbing 2 menyetujui proposal',
-              pesan: isPembimbing1 
-                ? 'Proposal Anda telah disetujui oleh Pembimbing 1' 
-                : 'Proposal Anda telah disetujui oleh Pembimbing 2',
-              is_read: false
-            }
-          ]);
+          .insert([{
+            from_user: dosenId,
+            to_user: mahasiswaId,
+            judul: isPembimbing1 ? 'Pembimbing 1 menyetujui proposal' : 'Pembimbing 2 menyetujui proposal',
+            pesan: isPembimbing1 
+              ? 'Proposal Anda telah disetujui oleh Pembimbing 1' 
+              : 'Proposal Anda telah disetujui oleh Pembimbing 2',
+            is_read: false
+          }]);
           
-        if (notifError) {
-          console.error('Error creating approval notification:', notifError);
-          throw notifError;
+        if (notifResult.error) {
+          console.error('Error sending notification:', notifResult.error);
         }
         
-        console.log(`Approval process completed successfully`);
-        return { id, ...updateData };
+        return { success: true };
       } catch (error) {
-        console.error('Error in approval process:', error);
+        console.error('Complete error details:', error);
         throw error;
       }
     },
@@ -499,12 +514,68 @@ export function useApprovePengajuanTA() {
       });
     },
     onError: (error) => {
+      console.error('Mutation error:', error);
       toast({
         variant: "destructive",
         title: "Gagal Menyetujui",
-        description: error.message || "Terjadi kesalahan saat menyetujui proposal tugas akhir.",
+        description: "Terjadi kesalahan saat menyetujui proposal. Cek konsol untuk detail."
       });
     },
+  });
+}
+
+// Tambahkan fungsi ini untuk mengambil pengajuan TA berdasarkan user_id mahasiswa
+export function usePengajuanTAByStudentUserId(userId: string) {
+  return useQuery({
+    queryKey: ['pengajuan-ta', 'student-user', userId],
+    queryFn: async () => {
+      if (!userId) return [];
+      
+      try {
+        // Langkah 1: Dapatkan ID mahasiswa dari user_id
+        const { data: mahasiswaData, error: mahasiswaError } = await supabase
+          .from('mahasiswas')
+          .select('id')
+          .eq('user_id', userId)
+          .single();
+          
+        if (mahasiswaError || !mahasiswaData) {
+          console.error("Error fetching mahasiswa id:", mahasiswaError);
+          return [];
+        }
+        
+        const mahasiswaId = mahasiswaData.id;
+        console.log("Found mahasiswa ID:", mahasiswaId);
+        
+        // Langkah 2: Dapatkan pengajuan TA dengan mahasiswa_id tersebut
+        const { data, error } = await supabase
+          .from('pengajuan_tas')
+          .select(`
+            *,
+            mahasiswa:mahasiswa_id (nama, nim, email, nomor_telepon)
+          `)
+          .eq('mahasiswa_id', mahasiswaId)
+          .order('created_at', { ascending: false });
+        
+        if (error) {
+          console.error("Error fetching student proposals:", error);
+          throw error;
+        }
+        
+        // Tambahkan data pembimbing placeholder jika perlu
+        const result = data.map(item => ({
+          ...item,
+          dosen_pembimbing1: { nama_dosen: "Loading..." },
+          dosen_pembimbing2: { nama_dosen: "Loading..." }
+        }));
+        
+        return result as PengajuanTA[];
+      } catch (error) {
+        console.error("Error in fetching by student user_id:", error);
+        return [];
+      }
+    },
+    enabled: !!userId
   });
 }
 

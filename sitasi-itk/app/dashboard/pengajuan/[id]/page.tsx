@@ -66,30 +66,47 @@ export default function PengajuanDetailPage({ params }: { params: { id: string }
     }
   }, [user]);
   
+  
   const handleApprove = async (isFirstSupervisor: boolean) => {
     if (!pengajuan || !user?.id) return;
     
     setIsProcessing(true);
+    console.log("Starting approval process with params:", {
+      id: pengajuan.id,
+      isFirstSupervisor,
+      dosenId: user.id
+    });
     
     try {
-      // Get mahasiswa user_id from the pengajuan data
+      // Debug Supabase connection
+      const { data: testData } = await supabase.from('pengajuan_tas').select('id').limit(1);
+      console.log("Supabase connection test:", testData);
+      
+      // Get mahasiswa user_id for notification
       const { data: mahasiswaInfo, error: mahasiswaError } = await supabase
         .from('mahasiswas')
-        .select('user_id')
+        .select('user_id, nama')
         .eq('id', pengajuan.mahasiswa_id)
         .single();
         
       if (mahasiswaError) {
-        console.error('Error fetching mahasiswa user_id:', mahasiswaError);
-        throw new Error('Failed to get student information');
+        console.error('Error fetching mahasiswa:', mahasiswaError);
+        throw new Error('Gagal mendapatkan informasi mahasiswa');
       }
       
-      // Call the mutation
+      console.log("Approve data preparation:", {
+        pengajuanId: pengajuan.id,
+        isPembimbing1: isFirstSupervisor, 
+        dosenId: user.id,
+        mahasiswaId: mahasiswaInfo.user_id
+      });
+      
+      // Call the mutation with detailed error handling
       approvePengajuan({
         id: pengajuan.id,
         isPembimbing1: isFirstSupervisor,
-        dosenId: user.id, // We use the user's auth ID here
-        mahasiswaId: mahasiswaInfo.user_id // We use the student's user_id for notification
+        dosenId: user.id,
+        mahasiswaId: mahasiswaInfo.user_id
       }, {
         onSuccess: () => {
           toast({
@@ -98,27 +115,25 @@ export default function PengajuanDetailPage({ params }: { params: { id: string }
           });
           setIsProcessing(false);
           
-          // Refresh the data
-          setTimeout(() => {
-            window.location.reload();
-          }, 1000);
+          // Reload page after short delay
+          setTimeout(() => window.location.reload(), 1500);
         },
-        onError: (error) => {
-          console.error('Error approving pengajuan:', error);
+        onError: (error: any) => {
+          console.error('Full approval error:', error);
           toast({
             variant: "destructive",
             title: "Error",
-            description: error.message || "Terjadi kesalahan saat menyetujui pengajuan.",
+            description: error.message || "Terjadi kesalahan saat menyetujui."
           });
           setIsProcessing(false);
         }
       });
-    } catch (error) {
-      console.error('Error in approval process:', error);
+    } catch (error: any) {
+      console.error('Error in approval handler:', error);
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Terjadi kesalahan saat menyetujui pengajuan.",
+        description: error.message || "Terjadi kesalahan saat proses persetujuan."
       });
       setIsProcessing(false);
     }
