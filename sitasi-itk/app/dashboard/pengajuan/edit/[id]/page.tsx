@@ -44,7 +44,7 @@ export default function EditPengajuanPage({ params }: { params: { id: string } }
   const isEditable = pengajuan && pengajuan.status !== 'approved';
   
   const handleSubmit = (formValues: PengajuanTAFormValues) => {
-    if (!pengajuan || !mahasiswaId) {
+    if (!pengajuan || !mahasiswaId || !user) {  // Add !user to this check
       toast({
         variant: "destructive",
         title: "Error",
@@ -94,7 +94,7 @@ export default function EditPengajuanPage({ params }: { params: { id: string } }
             ? 'submitted' 
             : pengajuan.status
         },
-        userId: mahasiswaId 
+        userId: user.id
       },
       {
         onSuccess: () => {
