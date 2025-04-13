@@ -112,15 +112,15 @@ export function useSupervisorPengajuanTA(dosenId: string) {
         
         console.log(`Found ${filteredProposals.length} proposals for supervisor:`, filteredProposals);
         
-        // Add dosen_pembimbing1 and dosen_pembimbing2 info to be consistent with the data model
+        // Ubah kode ini di useSupervisorPengajuanTA
         for (const proposal of filteredProposals) {
-          // Fake the dosen info for now since we're filtering client-side
-          proposal.dosen_pembimbing1 = { 
+          // Gunakan type assertion "as any"
+          (proposal as any).dosen_pembimbing1 = { 
             nama_dosen: "Pembimbing 1", 
             nip: "", 
             email: "" 
           };
-          proposal.dosen_pembimbing2 = { 
+          (proposal as any).dosen_pembimbing2 = { 
             nama_dosen: "Pembimbing 2", 
             nip: "", 
             email: "" 
