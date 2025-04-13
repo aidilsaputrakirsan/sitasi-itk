@@ -14,6 +14,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useRBAC } from '@/hooks/useRBAC';
 import { AlertCircle } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
 
 export default function CreatePengajuanPage() {
   const router = useRouter();
@@ -22,27 +23,56 @@ export default function CreatePengajuanPage() {
   const { mutate: createPengajuan, isPending } = useCreatePengajuanTA();
   const [mahasiswaId, setMahasiswaId] = useState<string>('');
   const [profileMissing, setProfileMissing] = useState(false);
+  const [loading, setLoading] = useState(true);
   
   // Check if user has the right role to access this page
   const { hasAccess, isLoading: rbacLoading } = useRBAC({
     allowedRoles: ['mahasiswa'],
   });
   
-  // Fetch mahasiswa data for the current user
-  const { data: mahasiswaData, isLoading: isLoadingMahasiswa, error: mahasiswaError } = useMahasiswaByUserId(
-    user?.id || ''
-  );
-  
-  // Set mahasiswaId when data is available and check for profile errors
+  // Fetch mahasiswa data directly
   useEffect(() => {
-    if (mahasiswaData) {
-      setMahasiswaId(mahasiswaData.id);
-      setProfileMissing(false);
-    } else if (mahasiswaError && !isLoadingMahasiswa) {
-      console.error('Error fetching mahasiswa data:', mahasiswaError);
-      setProfileMissing(true);
+    async function fetchMahasiswaData() {
+      if (!user) {
+        setLoading(false);
+        return;
+      }
+      
+      try {
+        setLoading(true);
+        console.log("Fetching mahasiswa data for user ID:", user.id);
+        
+        const { data, error } = await supabase
+          .from('mahasiswas')
+          .select('id')
+          .eq('user_id', user.id)
+          .single();
+        
+        if (error) {
+          console.error('Error fetching mahasiswa data:', error);
+          setProfileMissing(true);
+          setLoading(false);
+          return;
+        }
+        
+        if (data) {
+          console.log("Found mahasiswa ID:", data.id);
+          setMahasiswaId(data.id);
+          setProfileMissing(false);
+        } else {
+          console.log("No mahasiswa record found");
+          setProfileMissing(true);
+        }
+      } catch (err) {
+        console.error('Unexpected error:', err);
+        setProfileMissing(true);
+      } finally {
+        setLoading(false);
+      }
     }
-  }, [mahasiswaData, mahasiswaError, isLoadingMahasiswa]);
+    
+    fetchMahasiswaData();
+  }, [user]);
   
   const handleSubmit = (formValues: PengajuanTAFormValues) => {
     if (!mahasiswaId) {
@@ -54,6 +84,8 @@ export default function CreatePengajuanPage() {
       router.push('/dashboard/profile');
       return;
     }
+    
+    console.log("Submitting thesis proposal with mahasiswaId:", mahasiswaId);
     
     createPengajuan(
       { formValues, mahasiswaId },
@@ -73,7 +105,7 @@ export default function CreatePengajuanPage() {
     );
   };
   
-  if (rbacLoading || isLoadingMahasiswa) {
+  if (rbacLoading || loading) {
     return (
       <div className="flex justify-center items-center min-h-[500px]">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-600"></div>

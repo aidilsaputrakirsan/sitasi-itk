@@ -1,7 +1,7 @@
 // components/pengajuan-ta/PengajuanTAForm.tsx
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -10,16 +10,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { useToast } from "@/hooks/use-toast";
 import { useDosens } from '@/hooks/useDosens';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Select, Option } from "@/components/ui/select"; // Import the simplified components
 
 // Define the form schema with Zod
 const formSchema = z.object({
@@ -45,19 +37,12 @@ export function PengajuanTAForm({
   defaultValues,
   isEditing = false
 }: PengajuanTAFormProps) {
-  const { toast } = useToast();
   const { data: dosens, isLoading: isLoadingDosens } = useDosens();
-  
-  // State for select values (as a fallback for the radix-ui selects)
-  const [bidangPenelitian, setBidangPenelitian] = useState(defaultValues?.bidang_penelitian || '');
-  const [pembimbing1, setPembimbing1] = useState(defaultValues?.pembimbing_1 || '');
-  const [pembimbing2, setPembimbing2] = useState(defaultValues?.pembimbing_2 || '');
   
   const {
     register,
     handleSubmit,
     formState: { errors },
-    setValue,
     watch,
   } = useForm<PengajuanTAFormValues>({
     resolver: zodResolver(formSchema),
@@ -69,22 +54,26 @@ export function PengajuanTAForm({
     }
   });
 
-  // Update the form values when the select values change
-  useEffect(() => {
-    if (bidangPenelitian) {
-      setValue('bidang_penelitian', bidangPenelitian);
-    }
-    if (pembimbing1) {
-      setValue('pembimbing_1', pembimbing1);
-    }
-    if (pembimbing2) {
-      setValue('pembimbing_2', pembimbing2);
-    }
-  }, [bidangPenelitian, pembimbing1, pembimbing2, setValue]);
-
   const handleFormSubmit = (data: PengajuanTAFormValues) => {
     onSubmit(data);
   };
+
+  // Watch for pembimbing_1 to filter pembimbing_2 options
+  const pembimbing1 = watch('pembimbing_1');
+
+  // Research fields
+  const researchFields = [
+    "Data Science",
+    "Artificial Intelligence",
+    "Computer Network",
+    "Mobile Application",
+    "Web Development",
+    "System Development",
+    "Internet of Things",
+    "Game Development",
+    "Cybersecurity",
+    "Human-Computer Interaction"
+  ];
 
   return (
     <Card className="w-full">
@@ -107,86 +96,52 @@ export function PengajuanTAForm({
 
           <div className="space-y-2">
             <Label htmlFor="bidang_penelitian">Bidang Penelitian</Label>
-            <Select 
-              onValueChange={(value: string) => {
-                setBidangPenelitian(value);
-                setValue('bidang_penelitian', value);
-              }}
-              defaultValue={defaultValues?.bidang_penelitian}
+            <Select
+              id="bidang_penelitian"
+              {...register('bidang_penelitian')}
+              error={errors.bidang_penelitian?.message}
             >
-              <SelectTrigger id="bidang_penelitian">
-                <SelectValue placeholder="Pilih bidang penelitian" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="Data Science">Data Science</SelectItem>
-                <SelectItem value="Artificial Intelligence">Artificial Intelligence</SelectItem>
-                <SelectItem value="Computer Network">Computer Network</SelectItem>
-                <SelectItem value="Mobile Application">Mobile Application</SelectItem>
-                <SelectItem value="Web Development">Web Development</SelectItem>
-                <SelectItem value="System Development">System Development</SelectItem>
-                <SelectItem value="Internet of Things">Internet of Things</SelectItem>
-                <SelectItem value="Game Development">Game Development</SelectItem>
-                <SelectItem value="Cybersecurity">Cybersecurity</SelectItem>
-                <SelectItem value="Human-Computer Interaction">Human-Computer Interaction</SelectItem>
-              </SelectContent>
+              <Option value="">Pilih bidang penelitian</Option>
+              {researchFields.map(field => (
+                <Option key={field} value={field}>{field}</Option>
+              ))}
             </Select>
-            {errors.bidang_penelitian && (
-              <p className="text-red-500 text-xs mt-1">{errors.bidang_penelitian.message}</p>
-            )}
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="pembimbing_1">Pembimbing 1</Label>
-            <Select 
-              onValueChange={(value: string) => {
-                setPembimbing1(value);
-                setValue('pembimbing_1', value);
-              }}
-              defaultValue={defaultValues?.pembimbing_1}
+            <Select
+              id="pembimbing_1"
+              {...register('pembimbing_1')}
+              error={errors.pembimbing_1?.message}
             >
-              <SelectTrigger id="pembimbing_1">
-                <SelectValue placeholder="Pilih pembimbing 1" />
-              </SelectTrigger>
-              <SelectContent>
-                {isLoadingDosens ? (
-                  <SelectItem value="" disabled>Loading...</SelectItem>
-                ) : dosens?.map(dosen => (
-                  <SelectItem key={dosen.id} value={dosen.id}>
-                    {dosen.nama_dosen} - {dosen.nip}
-                  </SelectItem>
-                ))}
-              </SelectContent>
+              <Option value="">Pilih pembimbing 1</Option>
+              {isLoadingDosens ? (
+                <Option value="" disabled>Loading...</Option>
+              ) : dosens?.map(dosen => (
+                <Option key={dosen.id} value={dosen.id}>
+                  {dosen.nama_dosen} - {dosen.nip}
+                </Option>
+              ))}
             </Select>
-            {errors.pembimbing_1 && (
-              <p className="text-red-500 text-xs mt-1">{errors.pembimbing_1.message}</p>
-            )}
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="pembimbing_2">Pembimbing 2</Label>
-            <Select 
-              onValueChange={(value: string) => {
-                setPembimbing2(value);
-                setValue('pembimbing_2', value);
-              }}
-              defaultValue={defaultValues?.pembimbing_2}
+            <Select
+              id="pembimbing_2"
+              {...register('pembimbing_2')}
+              error={errors.pembimbing_2?.message}
             >
-              <SelectTrigger id="pembimbing_2">
-                <SelectValue placeholder="Pilih pembimbing 2" />
-              </SelectTrigger>
-              <SelectContent>
-                {isLoadingDosens ? (
-                  <SelectItem value="" disabled>Loading...</SelectItem>
-                ) : dosens?.filter(dosen => dosen.id !== pembimbing1).map(dosen => (
-                  <SelectItem key={dosen.id} value={dosen.id}>
-                    {dosen.nama_dosen} - {dosen.nip}
-                  </SelectItem>
-                ))}
-              </SelectContent>
+              <Option value="">Pilih pembimbing 2</Option>
+              {isLoadingDosens ? (
+                <Option value="" disabled>Loading...</Option>
+              ) : dosens?.filter(dosen => dosen.id !== pembimbing1).map(dosen => (
+                <Option key={dosen.id} value={dosen.id}>
+                  {dosen.nama_dosen} - {dosen.nip}
+                </Option>
+              ))}
             </Select>
-            {errors.pembimbing_2 && (
-              <p className="text-red-500 text-xs mt-1">{errors.pembimbing_2.message}</p>
-            )}
           </div>
         </CardContent>
         <CardFooter className="flex justify-between">

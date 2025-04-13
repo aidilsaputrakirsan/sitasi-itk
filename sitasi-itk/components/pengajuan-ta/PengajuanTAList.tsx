@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/DataTable";
 import { ColumnDef } from '@tanstack/react-table';
-import { ArrowUpDown, FileText, Eye, MoreHorizontal, PlusCircle } from 'lucide-react';
+import { ArrowUpDown, FileText, Eye, MoreHorizontal } from 'lucide-react';
 import { 
   DropdownMenu, 
   DropdownMenuContent,
@@ -23,13 +23,18 @@ interface PengajuanTAListProps {
   pengajuanList: PengajuanTA[];
   userRole: 'mahasiswa' | 'dosen' | 'tendik' | 'koorpro';
   isLoading?: boolean;
+  hiddenButton?: boolean;
 }
 
-export function PengajuanTAList({ pengajuanList, userRole, isLoading = false }: PengajuanTAListProps) {
+export function PengajuanTAList({ pengajuanList, userRole, isLoading = false, hiddenButton = false }: PengajuanTAListProps) {
   
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return format(date, 'dd MMM yyyy', { locale: id });
+    try {
+      const date = new Date(dateString);
+      return format(date, 'dd MMM yyyy', { locale: id });
+    } catch (error) {
+      return 'Invalid date';
+    }
   };
 
   const getColumns = (): ColumnDef<PengajuanTA>[] => {
@@ -108,12 +113,17 @@ export function PengajuanTAList({ pengajuanList, userRole, isLoading = false }: 
       commonColumns.splice(1, 0, {
         accessorKey: 'mahasiswa.nama',
         header: 'Mahasiswa',
-        cell: ({ row }) => (
-          <div>
-            {row.original.mahasiswa?.nama} 
-            <div className="text-xs text-gray-500">{row.original.mahasiswa?.nim}</div>
-          </div>
-        ),
+        cell: ({ row }) => {
+          const mahasiswa = row.original.mahasiswa;
+          return mahasiswa ? (
+            <div>
+              {mahasiswa.nama} 
+              <div className="text-xs text-gray-500">{mahasiswa.nim}</div>
+            </div>
+          ) : (
+            <div className="text-gray-400 italic">Data tidak tersedia</div>
+          );
+        },
       });
     }
     
@@ -122,23 +132,32 @@ export function PengajuanTAList({ pengajuanList, userRole, isLoading = false }: 
       commonColumns.splice(1, 0, {
         accessorKey: 'mahasiswa.nama',
         header: 'Mahasiswa',
-        cell: ({ row }) => (
-          <div>
-            {row.original.mahasiswa?.nama} 
-            <div className="text-xs text-gray-500">{row.original.mahasiswa?.nim}</div>
-          </div>
-        ),
+        cell: ({ row }) => {
+          const mahasiswa = row.original.mahasiswa;
+          return mahasiswa ? (
+            <div>
+              {mahasiswa.nama} 
+              <div className="text-xs text-gray-500">{mahasiswa.nim}</div>
+            </div>
+          ) : (
+            <div className="text-gray-400 italic">Data tidak tersedia</div>
+          );
+        },
       });
       
       commonColumns.splice(3, 0, {
         accessorKey: 'pembimbing',
         header: 'Pembimbing',
-        cell: ({ row }) => (
-          <div className="text-sm">
-            <div>{row.original.dosen_pembimbing1?.nama_dosen}</div>
-            <div className="text-gray-500">{row.original.dosen_pembimbing2?.nama_dosen}</div>
-          </div>
-        ),
+        cell: ({ row }) => {
+          const p1 = row.original.dosen_pembimbing1?.nama_dosen;
+          const p2 = row.original.dosen_pembimbing2?.nama_dosen;
+          return (
+            <div className="text-sm">
+              <div>{p1 || 'Tidak tersedia'}</div>
+              <div className="text-gray-500">{p2 || 'Tidak tersedia'}</div>
+            </div>
+          );
+        },
       });
     }
     
@@ -146,26 +165,46 @@ export function PengajuanTAList({ pengajuanList, userRole, isLoading = false }: 
   };
 
   const columns = getColumns();
+  
+  // Custom empty state component
+  const EmptyState = () => (
+    <div className="flex flex-col items-center justify-center py-10">
+      <FileText className="h-16 w-16 text-gray-300 mb-4" />
+      <h3 className="text-lg font-medium text-gray-900">Belum ada pengajuan</h3>
+      {userRole === 'mahasiswa' ? (
+        <p className="mt-1 text-sm text-gray-500 text-center max-w-md mb-4">
+          Anda belum mengajukan proposal tugas akhir.
+          {!hiddenButton && (
+            <Button asChild className="mt-4">
+              <Link href="/dashboard/pengajuan/create">
+                Ajukan Tugas Akhir
+              </Link>
+            </Button>
+          )}
+        </p>
+      ) : userRole === 'dosen' ? (
+        <p className="mt-1 text-sm text-gray-500 text-center max-w-md">
+          Belum ada mahasiswa yang mengajukan proposal tugas akhir kepada Anda.
+        </p>
+      ) : (
+        <p className="mt-1 text-sm text-gray-500 text-center max-w-md">
+          Belum ada pengajuan proposal tugas akhir.
+        </p>
+      )}
+    </div>
+  );
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
+      <CardHeader>
         <CardTitle>Daftar Pengajuan Tugas Akhir</CardTitle>
-        {userRole === 'mahasiswa' && (
-          <Button asChild>
-            <Link href="/dashboard/pengajuan/create">
-              <PlusCircle className="h-4 w-4 mr-2" />
-              Ajukan Tugas Akhir
-            </Link>
-          </Button>
-        )}
       </CardHeader>
       <CardContent>
         {isLoading ? (
           <div className="flex justify-center items-center min-h-[300px]">
             <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-600"></div>
           </div>
-        ) : pengajuanList?.length ? (
+        ) : pengajuanList && pengajuanList.length > 0 ? (
           <DataTable 
             columns={columns} 
             data={pengajuanList} 
@@ -173,25 +212,7 @@ export function PengajuanTAList({ pengajuanList, userRole, isLoading = false }: 
             searchPlaceholder="Cari judul tugas akhir..."
           />
         ) : (
-          <div className="text-center py-10">
-            <FileText className="h-10 w-10 mx-auto text-gray-400 mb-2" />
-            <h3 className="text-lg font-medium text-gray-900">Belum ada pengajuan</h3>
-            <p className="mt-1 text-sm text-gray-500">
-              {userRole === 'mahasiswa' 
-                ? 'Anda belum mengajukan proposal tugas akhir.' 
-                : userRole === 'dosen'
-                  ? 'Belum ada mahasiswa yang mengajukan proposal tugas akhir kepada Anda.'
-                  : 'Belum ada pengajuan proposal tugas akhir.'}
-            </p>
-            {userRole === 'mahasiswa' && (
-              <Button className="mt-4" asChild>
-                <Link href="/dashboard/pengajuan/create">
-                  <PlusCircle className="h-4 w-4 mr-2" />
-                  Ajukan Tugas Akhir
-                </Link>
-              </Button>
-            )}
-          </div>
+          <EmptyState />
         )}
       </CardContent>
     </Card>

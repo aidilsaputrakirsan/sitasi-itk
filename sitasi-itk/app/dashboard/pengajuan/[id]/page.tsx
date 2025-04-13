@@ -1,7 +1,7 @@
 // app/dashboard/pengajuan/[id]/page.tsx
 'use client';
 
-import { useState, useEffect, ReactNode, ChangeEvent } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { PengajuanTADetail } from '@/components/pengajuan-ta/PengajuanTADetail';
@@ -11,128 +11,22 @@ import { useDosenByUserId } from '@/hooks/useDosens';
 import { UserRole } from '@/types/auth';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
-
-// Define interfaces for our temporary components
-interface AlertDialogProps {
-  children: ReactNode;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}
-
-interface AlertDialogContentProps {
-  children: ReactNode;
-}
-
-interface AlertDialogHeaderProps {
-  children: ReactNode;
-}
-
-interface AlertDialogTitleProps {
-  children: ReactNode;
-}
-
-interface AlertDialogDescriptionProps {
-  children: ReactNode;
-}
-
-interface AlertDialogFooterProps {
-  children: ReactNode;
-}
-
-interface AlertDialogCancelProps {
-  children: ReactNode;
-  onClick: () => void;
-}
-
-interface AlertDialogActionProps {
-  children: ReactNode;
-  onClick: () => void;
-  disabled?: boolean;
-}
-
-interface TextareaProps {
-  id: string;
-  placeholder: string;
-  value: string;
-  onChange: (e: ChangeEvent<HTMLTextAreaElement>) => void;
-  className?: string;
-}
-
-interface LabelProps {
-  htmlFor: string;
-  children: ReactNode;
-}
-
-// TEMPORARY SOLUTION: Instead of importing the missing UI components,
-// we'll use basic HTML elements with proper TypeScript interfaces
-const AlertDialog = ({ children, open, onOpenChange }: AlertDialogProps) => (
-  open ? <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center">
-    <div className="bg-white p-6 rounded-lg max-w-md w-full">
-      {children}
-    </div>
-  </div> : null
-);
-
-const AlertDialogContent = ({ children }: AlertDialogContentProps) => <div>{children}</div>;
-const AlertDialogHeader = ({ children }: AlertDialogHeaderProps) => <div className="mb-4">{children}</div>;
-const AlertDialogTitle = ({ children }: AlertDialogTitleProps) => <h3 className="text-lg font-medium">{children}</h3>;
-const AlertDialogDescription = ({ children }: AlertDialogDescriptionProps) => <p className="text-sm text-gray-500">{children}</p>;
-const AlertDialogFooter = ({ children }: AlertDialogFooterProps) => <div className="flex justify-end gap-2 mt-4">{children}</div>;
-const AlertDialogCancel = ({ children, onClick }: AlertDialogCancelProps) => (
-  <button 
-    className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium bg-white text-gray-700 hover:bg-gray-50"
-    onClick={onClick}
-  >
-    {children}
-  </button>
-);
-const AlertDialogAction = ({ children, onClick, disabled }: AlertDialogActionProps) => (
-  <button 
-    className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 disabled:opacity-50"
-    onClick={onClick}
-    disabled={disabled}
-  >
-    {children}
-  </button>
-);
-
-// Textarea replacement
-const Textarea = ({ id, placeholder, value, onChange, className }: TextareaProps) => (
-  <textarea
-    id={id}
-    placeholder={placeholder}
-    value={value}
-    onChange={onChange}
-    className={`w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 ${className}`}
-  />
-);
-
-// Label replacement
-const Label = ({ htmlFor, children }: LabelProps) => (
-  <label htmlFor={htmlFor} className="block text-sm font-medium text-gray-700 mb-1">
-    {children}
-  </label>
-);
+import { supabase } from '@/lib/supabase';
 
 export default function PengajuanDetailPage({ params }: { params: { id: string } }) {
   const router = useRouter();
   const { user } = useAuth();
   const { toast } = useToast();
-  const { data: pengajuan, isLoading } = usePengajuanTADetail(params.id);
-  const { mutate: approvePengajuan } = useApprovePengajuanTA();
-  const { mutate: updatePengajuan } = useUpdatePengajuanTA();
+  const { data: pengajuan, isLoading, error } = usePengajuanTADetail(params.id);
+  const { mutate: approvePengajuan, isPending: isApproving } = useApprovePengajuanTA();
+  const { mutate: updatePengajuan, isPending: isUpdating } = useUpdatePengajuanTA();
   
   const [userRole, setUserRole] = useState<UserRole>('mahasiswa');
   const [mahasiswaId, setMahasiswaId] = useState<string>('');
   const [dosenId, setDosenId] = useState<string>('');
   const [isPembimbing1, setIsPembimbing1] = useState(false);
   const [isPembimbing2, setIsPembimbing2] = useState(false);
-  
-  // Dialog states
-  const [showRejectDialog, setShowRejectDialog] = useState(false);
-  const [showRevisionDialog, setShowRevisionDialog] = useState(false);
-  const [rejectReason, setRejectReason] = useState('');
-  const [revisionNotes, setRevisionNotes] = useState('');
+  const [isProcessing, setIsProcessing] = useState(false);
   
   // Fetch mahasiswa data if user is a student
   const { data: mahasiswaData } = useMahasiswaByUserId(
@@ -152,10 +46,12 @@ export default function PengajuanDetailPage({ params }: { params: { id: string }
     
     if (dosenData && pengajuan) {
       setDosenId(dosenData.id);
-      setIsPembimbing1(pengajuan.pembimbing_1 === dosenData.id);
-      setIsPembimbing2(pengajuan.pembimbing_2 === dosenData.id);
+      
+      // For dosen, we need to check against user_id instead of dosen.id
+      setIsPembimbing1(pengajuan.pembimbing_1 === user?.id);
+      setIsPembimbing2(pengajuan.pembimbing_2 === user?.id);
     }
-  }, [mahasiswaData, dosenData, pengajuan]);
+  }, [mahasiswaData, dosenData, pengajuan, user?.id]);
   
   // Set user role
   useEffect(() => {
@@ -170,90 +66,235 @@ export default function PengajuanDetailPage({ params }: { params: { id: string }
     }
   }, [user]);
   
-  const handleApprove = (isFirstSupervisor: boolean) => {
-    if (!pengajuan || !dosenId) return;
+  const handleApprove = async (isFirstSupervisor: boolean) => {
+    if (!pengajuan || !user?.id) return;
     
-    approvePengajuan({
-      id: pengajuan.id,
-      isPembimbing1: isFirstSupervisor,
-      dosenId,
-      mahasiswaId: pengajuan.mahasiswa_id
-    });
-  };
-  
-  const handleReject = () => {
-    if (!pengajuan || !dosenId || !rejectReason) return;
+    setIsProcessing(true);
     
-    updatePengajuan({
-      id: pengajuan.id,
-      data: {
-        status: 'rejected'
-      },
-      userId: dosenId
-    }, {
-      onSuccess: () => {
-        // Add rejection reason to riwayat_pengajuans
-        updatePengajuan({
-          id: pengajuan.id,
-          data: {}, // No need to update pengajuan_ta again
-          userId: dosenId,
-          // Pass rejection reason as extra information to the hook
-          // We'll modify the hook to handle this properly
-        });
-        
-        // Create a separate function to add the rejection reason to riwayat_pengajuans
-        addRiwayatPengajuan(pengajuan.id, dosenId, 'Ditolak', `Ditolak dengan alasan: ${rejectReason}`);
-        
-        setShowRejectDialog(false);
-        setRejectReason('');
-        
-        toast({
-          title: "Pengajuan Ditolak",
-          description: "Pengajuan tugas akhir telah ditolak.",
-        });
-      }
-    });
-  };
-  
-  const handleRequestRevision = () => {
-    if (!pengajuan || !dosenId || !revisionNotes) return;
-    
-    updatePengajuan({
-      id: pengajuan.id,
-      data: {
-        status: 'revision'
-      },
-      userId: dosenId
-    }, {
-      onSuccess: () => {
-        // Add revision notes to riwayat_pengajuans separately
-        addRiwayatPengajuan(pengajuan.id, dosenId, 'Revisi', `Perlu revisi: ${revisionNotes}`);
-        
-        setShowRevisionDialog(false);
-        setRevisionNotes('');
-        
-        toast({
-          title: "Revisi Diminta",
-          description: "Permintaan revisi telah dikirim ke mahasiswa.",
-        });
-      }
-    });
-  };
-  
-  // Helper function to add riwayat_pengajuan separately
-  const addRiwayatPengajuan = async (pengajuanId: string, userId: string, riwayat: string, keterangan: string) => {
     try {
-      const { supabase } = await import('@/lib/supabase');
+      // Get mahasiswa user_id from the pengajuan data
+      const { data: mahasiswaInfo, error: mahasiswaError } = await supabase
+        .from('mahasiswas')
+        .select('user_id')
+        .eq('id', pengajuan.mahasiswa_id)
+        .single();
+        
+      if (mahasiswaError) {
+        console.error('Error fetching mahasiswa user_id:', mahasiswaError);
+        throw new Error('Failed to get student information');
+      }
       
-      await supabase.from('riwayat_pengajuans').insert([{
-        pengajuan_ta_id: pengajuanId,
-        user_id: userId,
-        riwayat,
-        keterangan,
-        status: riwayat.toLowerCase(),
-      }]);
+      // Call the mutation
+      approvePengajuan({
+        id: pengajuan.id,
+        isPembimbing1: isFirstSupervisor,
+        dosenId: user.id, // We use the user's auth ID here
+        mahasiswaId: mahasiswaInfo.user_id // We use the student's user_id for notification
+      }, {
+        onSuccess: () => {
+          toast({
+            title: "Berhasil",
+            description: "Pengajuan tugas akhir telah disetujui.",
+          });
+          setIsProcessing(false);
+          
+          // Refresh the data
+          setTimeout(() => {
+            window.location.reload();
+          }, 1000);
+        },
+        onError: (error) => {
+          console.error('Error approving pengajuan:', error);
+          toast({
+            variant: "destructive",
+            title: "Error",
+            description: error.message || "Terjadi kesalahan saat menyetujui pengajuan.",
+          });
+          setIsProcessing(false);
+        }
+      });
     } catch (error) {
-      console.error('Error adding riwayat:', error);
+      console.error('Error in approval process:', error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Terjadi kesalahan saat menyetujui pengajuan.",
+      });
+      setIsProcessing(false);
+    }
+  };
+  
+  const handleReject = async (isFirstSupervisor: boolean, reason: string) => {
+    if (!pengajuan || !user?.id || !reason) return;
+    
+    setIsProcessing(true);
+    
+    try {
+      // Update the pengajuan status to rejected
+      updatePengajuan({
+        id: pengajuan.id,
+        data: {
+          status: 'rejected'
+        },
+        userId: user.id
+      }, {
+        onSuccess: async () => {
+          // Add rejection reason to riwayat_pengajuans
+          const { error: historyError } = await supabase
+            .from('riwayat_pengajuans')
+            .insert([{
+              pengajuan_ta_id: pengajuan.id,
+              user_id: user.id,
+              riwayat: 'Ditolak',
+              keterangan: `Ditolak dengan alasan: ${reason}`,
+              status: 'rejected',
+            }]);
+          
+          if (historyError) {
+            console.error('Error adding rejection history:', historyError);
+          }
+          
+          // Get mahasiswa user_id for notification
+          const { data: mahasiswaInfo, error: mahasiswaError } = await supabase
+            .from('mahasiswas')
+            .select('user_id, nama')
+            .eq('id', pengajuan.mahasiswa_id)
+            .single();
+            
+          if (mahasiswaError) {
+            console.error('Error fetching mahasiswa for notification:', mahasiswaError);
+          } else {
+            // Send notification to student
+            const { error: notifError } = await supabase
+              .from('notifikasis')
+              .insert([{
+                from_user: user.id,
+                to_user: mahasiswaInfo.user_id,
+                judul: 'Pengajuan TA Ditolak',
+                pesan: `Pengajuan tugas akhir Anda ditolak${isFirstSupervisor ? ' oleh Pembimbing 1' : ' oleh Pembimbing 2'} dengan alasan: ${reason}`,
+                is_read: false
+              }]);
+              
+            if (notifError) {
+              console.error('Error sending rejection notification:', notifError);
+            }
+          }
+          
+          toast({
+            title: "Pengajuan Ditolak",
+            description: "Pengajuan tugas akhir telah ditolak.",
+          });
+          
+          setIsProcessing(false);
+          
+          // Navigate back to list
+          router.push('/dashboard/pengajuan');
+        },
+        onError: (error) => {
+          console.error('Error rejecting pengajuan:', error);
+          toast({
+            variant: "destructive",
+            title: "Error",
+            description: error.message || "Terjadi kesalahan saat menolak pengajuan.",
+          });
+          setIsProcessing(false);
+        }
+      });
+    } catch (error) {
+      console.error('Error in rejection process:', error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Terjadi kesalahan saat menolak pengajuan.",
+      });
+      setIsProcessing(false);
+    }
+  };
+  
+  const handleRevision = async (notes: string) => {
+    if (!pengajuan || !user?.id || !notes) return;
+    
+    setIsProcessing(true);
+    
+    try {
+      // Update the pengajuan status to revision
+      updatePengajuan({
+        id: pengajuan.id,
+        data: {
+          status: 'revision'
+        },
+        userId: user.id
+      }, {
+        onSuccess: async () => {
+          // Add revision notes to riwayat_pengajuans
+          const { error: historyError } = await supabase
+            .from('riwayat_pengajuans')
+            .insert([{
+              pengajuan_ta_id: pengajuan.id,
+              user_id: user.id,
+              riwayat: 'Perlu Revisi',
+              keterangan: `Perlu revisi: ${notes}`,
+              status: 'revision',
+            }]);
+          
+          if (historyError) {
+            console.error('Error adding revision history:', historyError);
+          }
+          
+          // Get mahasiswa user_id for notification
+          const { data: mahasiswaInfo, error: mahasiswaError } = await supabase
+            .from('mahasiswas')
+            .select('user_id, nama')
+            .eq('id', pengajuan.mahasiswa_id)
+            .single();
+            
+          if (mahasiswaError) {
+            console.error('Error fetching mahasiswa for notification:', mahasiswaError);
+          } else {
+            // Send notification to student
+            const { error: notifError } = await supabase
+              .from('notifikasis')
+              .insert([{
+                from_user: user.id,
+                to_user: mahasiswaInfo.user_id,
+                judul: 'Pengajuan TA Perlu Revisi',
+                pesan: `Pengajuan tugas akhir Anda perlu direvisi${isPembimbing1 ? ' menurut Pembimbing 1' : ' menurut Pembimbing 2'}: ${notes}`,
+                is_read: false
+              }]);
+              
+            if (notifError) {
+              console.error('Error sending revision notification:', notifError);
+            }
+          }
+          
+          toast({
+            title: "Revisi Diminta",
+            description: "Permintaan revisi telah dikirim ke mahasiswa.",
+          });
+          
+          setIsProcessing(false);
+          
+          // Navigate back to list
+          router.push('/dashboard/pengajuan');
+        },
+        onError: (error) => {
+          console.error('Error requesting revision:', error);
+          toast({
+            variant: "destructive",
+            title: "Error",
+            description: error.message || "Terjadi kesalahan saat meminta revisi.",
+          });
+          setIsProcessing(false);
+        }
+      });
+    } catch (error) {
+      console.error('Error in revision process:', error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Terjadi kesalahan saat meminta revisi.",
+      });
+      setIsProcessing(false);
     }
   };
   
@@ -293,73 +334,11 @@ export default function PengajuanDetailPage({ params }: { params: { id: string }
         userRole={userRole}
         isPembimbing1={isPembimbing1}
         isPembimbing2={isPembimbing2}
-        isApprovable={(isPembimbing1 || isPembimbing2) && pengajuan.status !== 'approved'}
+        isApprovable={(isPembimbing1 || isPembimbing2) && pengajuan.status !== 'approved' && !isProcessing}
         onApprove={handleApprove}
-        onReject={() => setShowRejectDialog(true)}
-        onRevision={() => setShowRevisionDialog(true)}
+        onReject={handleReject}
+        onRevision={handleRevision}
       />
-      
-      {/* Reject Dialog */}
-      <AlertDialog open={showRejectDialog} onOpenChange={setShowRejectDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Tolak Pengajuan</AlertDialogTitle>
-            <AlertDialogDescription>
-              Apakah Anda yakin ingin menolak pengajuan tugas akhir ini? Silakan berikan alasan penolakan.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <div className="py-4">
-            <Label htmlFor="reject-reason">Alasan Penolakan</Label>
-            <Textarea
-              id="reject-reason"
-              placeholder="Tulis alasan penolakan di sini..."
-              value={rejectReason}
-              onChange={(e) => setRejectReason(e.target.value)}
-              className="mt-2"
-            />
-          </div>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setShowRejectDialog(false)}>Batal</AlertDialogCancel>
-            <AlertDialogAction 
-              onClick={handleReject}
-              disabled={!rejectReason}
-            >
-              Tolak Pengajuan
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-      
-      {/* Revision Dialog */}
-      <AlertDialog open={showRevisionDialog} onOpenChange={setShowRevisionDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Minta Revisi</AlertDialogTitle>
-            <AlertDialogDescription>
-              Silakan berikan catatan revisi yang perlu dilakukan oleh mahasiswa.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <div className="py-4">
-            <Label htmlFor="revision-notes">Catatan Revisi</Label>
-            <Textarea
-              id="revision-notes"
-              placeholder="Tulis catatan revisi di sini..."
-              value={revisionNotes}
-              onChange={(e) => setRevisionNotes(e.target.value)}
-              className="mt-2"
-            />
-          </div>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setShowRevisionDialog(false)}>Batal</AlertDialogCancel>
-            <AlertDialogAction 
-              onClick={handleRequestRevision}
-              disabled={!revisionNotes}
-            >
-              Kirim Permintaan Revisi
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }

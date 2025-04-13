@@ -1,18 +1,21 @@
 // components/pengajuan-ta/PengajuanTADetail.tsx
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
 import { PengajuanTA } from '@/types/pengajuan-ta';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import { 
-  FileEdit, CheckCircle, XCircle, History, User, CalendarClock, FileText, Book 
+  FileEdit, CheckCircle, XCircle, History, User, CalendarClock, FileText, Book, AlertCircle 
 } from 'lucide-react';
 import { useRiwayatPengajuan } from '@/hooks/usePengajuanTA';
 import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/hooks/use-toast';
 
 // Simple Separator replacement
 const Separator = () => <div className="h-[1px] w-full bg-gray-200 my-4"></div>;
@@ -30,8 +33,8 @@ const formatDate = (dateString: string) => {
 interface PengajuanTADetailProps {
   pengajuan: PengajuanTA;
   onApprove?: (isPembimbing1: boolean) => void;
-  onReject?: (isPembimbing1: boolean) => void;
-  onRevision?: () => void;
+  onReject?: (isPembimbing1: boolean, reason: string) => void;
+  onRevision?: (notes: string) => void;
   userRole: 'mahasiswa' | 'dosen' | 'tendik' | 'koorpro';
   isPembimbing1?: boolean;
   isPembimbing2?: boolean;
@@ -50,6 +53,53 @@ export function PengajuanTADetail({
 }: PengajuanTADetailProps) {
   const { data: riwayat } = useRiwayatPengajuan(pengajuan.id);
   const { user } = useAuth();
+  const { toast } = useToast();
+  
+  // State for action modals
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [showRevisionModal, setShowRevisionModal] = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
+  const [revisionNotes, setRevisionNotes] = useState('');
+  
+  // Handle approval
+  const handleApprove = () => {
+    if (!onApprove) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Fungsi persetujuan tidak tersedia",
+      });
+      return;
+    }
+    
+    if (isPembimbing1) {
+      onApprove(true);
+    } else if (isPembimbing2) {
+      onApprove(false);
+    }
+  };
+  
+  // Handle rejection
+  const handleReject = () => {
+    if (!onReject || !rejectReason) return;
+    
+    onReject(isPembimbing1, rejectReason);
+    setShowRejectModal(false);
+    setRejectReason('');
+  };
+  
+  // Handle revision request
+  const handleRevision = () => {
+    if (!onRevision || !revisionNotes) return;
+    
+    onRevision(revisionNotes);
+    setShowRevisionModal(false);
+    setRevisionNotes('');
+  };
+  
+  // Check if current user has already approved this proposal
+  const hasApproved = isPembimbing1 ? pengajuan.approve_pembimbing1 : 
+                      isPembimbing2 ? pengajuan.approve_pembimbing2 : false;
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -155,31 +205,42 @@ export function PengajuanTADetail({
             
             {userRole === 'dosen' && isApprovable && (
               <>
-                <Button 
-                  variant="default" 
-                  onClick={() => onApprove?.(isPembimbing1)}
-                  disabled={
-                    (isPembimbing1 && pengajuan.approve_pembimbing1) || 
-                    (isPembimbing2 && pengajuan.approve_pembimbing2)
-                  }
-                >
-                  <CheckCircle className="h-4 w-4 mr-2" />
-                  Setujui
-                </Button>
-                <Button 
-                  variant="destructive" 
-                  onClick={() => onReject?.(isPembimbing1)}
-                >
-                  <XCircle className="h-4 w-4 mr-2" />
-                  Tolak
-                </Button>
-                <Button 
-                  variant="outline" 
-                  onClick={() => onRevision?.()}
-                >
-                  <FileEdit className="h-4 w-4 mr-2" />
-                  Minta Revisi
-                </Button>
+                {!hasApproved ? (
+                  <Button 
+                    variant="default" 
+                    onClick={handleApprove}
+                  >
+                    <CheckCircle className="h-4 w-4 mr-2" />
+                    Setujui
+                  </Button>
+                ) : (
+                  <Button 
+                    variant="default" 
+                    disabled={true}
+                  >
+                    <CheckCircle className="h-4 w-4 mr-2" />
+                    Telah Disetujui
+                  </Button>
+                )}
+                
+                {!hasApproved && (
+                  <>
+                    <Button 
+                      variant="destructive" 
+                      onClick={() => setShowRejectModal(true)}
+                    >
+                      <XCircle className="h-4 w-4 mr-2" />
+                      Tolak
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      onClick={() => setShowRevisionModal(true)}
+                    >
+                      <FileEdit className="h-4 w-4 mr-2" />
+                      Minta Revisi
+                    </Button>
+                  </>
+                )}
               </>
             )}
             
@@ -236,6 +297,84 @@ export function PengajuanTADetail({
           </CardContent>
         </Card>
       </div>
+      
+      {/* Reject Modal */}
+      {showRejectModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg w-full max-w-md p-6">
+            <h3 className="text-lg font-semibold mb-2">Tolak Pengajuan</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Berikan alasan penolakan pengajuan tugas akhir ini
+            </p>
+            
+            <div className="mb-4">
+              <Label htmlFor="reject-reason">Alasan Penolakan</Label>
+              <Textarea
+                id="reject-reason"
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                placeholder="Jelaskan alasan penolakan..."
+                className="min-h-[100px] mt-1"
+              />
+            </div>
+            
+            <div className="flex justify-end space-x-2">
+              <Button 
+                variant="outline" 
+                onClick={() => setShowRejectModal(false)}
+              >
+                Batal
+              </Button>
+              <Button 
+                variant="destructive" 
+                onClick={handleReject}
+                disabled={!rejectReason.trim()}
+              >
+                Tolak Pengajuan
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Revision Modal */}
+      {showRevisionModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg w-full max-w-md p-6">
+            <h3 className="text-lg font-semibold mb-2">Minta Revisi</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Berikan catatan revisi yang perlu dilakukan
+            </p>
+            
+            <div className="mb-4">
+              <Label htmlFor="revision-notes">Catatan Revisi</Label>
+              <Textarea
+                id="revision-notes"
+                value={revisionNotes}
+                onChange={(e) => setRevisionNotes(e.target.value)}
+                placeholder="Jelaskan revisi yang diperlukan..."
+                className="min-h-[100px] mt-1"
+              />
+            </div>
+            
+            <div className="flex justify-end space-x-2">
+              <Button 
+                variant="outline" 
+                onClick={() => setShowRevisionModal(false)}
+              >
+                Batal
+              </Button>
+              <Button 
+                variant="default" 
+                onClick={handleRevision}
+                disabled={!revisionNotes.trim()}
+              >
+                Kirim Permintaan Revisi
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
