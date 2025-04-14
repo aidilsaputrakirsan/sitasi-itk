@@ -134,7 +134,10 @@ export function useStudentPengajuanTA(mahasiswaId: string) {
 }
 
 // Add this to hooks/usePengajuanTA.ts
-export function useConsolidatedPengajuanTA(userRole: UserRole, userId: string) {
+export function useConsolidatedPengajuanTA(
+  userRole: UserRole | undefined, // Tambahkan undefined sebagai tipe yang valid
+  userId: string
+) {
   return useQuery<PengajuanTA[], Error>({
     queryKey: ['pengajuan-consolidated', userRole, userId],
     queryFn: async () => {
@@ -272,7 +275,7 @@ export function useConsolidatedPengajuanTA(userRole: UserRole, userId: string) {
         return [];
       }
     },
-    enabled: !!userId,
+    enabled: userRole !== undefined && !!userId,
   });
 }
 

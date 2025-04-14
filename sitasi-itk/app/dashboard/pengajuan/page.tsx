@@ -5,7 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { PengajuanTAList } from '@/components/pengajuan-ta/PengajuanTAList';
 import { 
   useConsolidatedPengajuanTA, 
-  useMahasiswaPengajuanTA  // Gunakan hook baru
+  useMahasiswaPengajuanTA
 } from '@/hooks/usePengajuanTA';
 import { UserRole } from '@/types/auth';
 import { Button } from '@/components/ui/button';
@@ -34,15 +34,16 @@ export default function PengajuanPage() {
     }
   }, [user]);
   
-  // Gunakan hook yang berbeda berdasarkan peran pengguna
-  const { data: adminDosenData, isLoading: isLoadingAdminDosen } = useConsolidatedPengajuanTA(
-    userRole === 'mahasiswa' ? '' : userRole, 
-    user?.id || ''
-  );
-  
-  // Khusus untuk mahasiswa, gunakan hook baru yang lebih sederhana & langsung
+  // Khusus untuk mahasiswa, gunakan hook baru yang lebih sederhana
   const { data: mahasiswaData, isLoading: isLoadingMahasiswa } = useMahasiswaPengajuanTA(
     userRole === 'mahasiswa' ? user?.id || '' : ''
+  );
+  
+  // Untuk dosen dan admin, gunakan hook yang lain
+  // Hanya aktifkan hook ini jika userRole BUKAN 'mahasiswa'
+  const { data: adminDosenData, isLoading: isLoadingAdminDosen } = useConsolidatedPengajuanTA(
+    userRole !== 'mahasiswa' ? userRole : undefined, // Gunakan undefined alih-alih string kosong
+    userRole !== 'mahasiswa' ? user?.id || '' : ''
   );
   
   // Kombinasikan data sesuai peran
