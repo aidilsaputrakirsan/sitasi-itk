@@ -12,7 +12,14 @@ import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent } from '@/components/ui/card';
 import { useRBAC } from '@/hooks/useRBAC';
 
-export default function EditPengajuanPage({ params }: { params: { id: string } }) {
+// Define the correct type for Next.js 15 page props
+interface PageProps {
+  params: {
+    id: string;
+  };
+}
+
+export default function EditPengajuanPage({ params }: PageProps) {
   const router = useRouter();
   const { user } = useAuth();
   const { toast } = useToast();
