@@ -2,6 +2,8 @@
 
 export type StatusPengajuan = 
   | 'submitted'  // Submitted but not yet approved
+  | 'approved_pembimbing1'  // Approved by pembimbing 1
+  | 'approved_pembimbing2'  // Approved by pembimbing 2
   | 'approved'   // Approved by both supervisors
   | 'revision'   // Needs revision
   | 'rejected'   // Rejected
@@ -21,17 +23,23 @@ export interface PengajuanTA {
   updated_at: string;
   // Relations
   mahasiswa?: {
+    id?: string;
+    user_id?: string;
     nama: string;
     nim: string;
     email: string;
     nomor_telepon?: string;
   };
   dosen_pembimbing1?: {
+    id?: string;
+    user_id?: string;
     nama_dosen: string;
     nip: string;
     email: string;
   };
   dosen_pembimbing2?: {
+    id?: string;
+    user_id?: string;
     nama_dosen: string;
     nip: string;
     email: string;
@@ -53,7 +61,7 @@ export interface RiwayatPengajuan {
   keterangan: string;
   status: string;
   created_at: string;
-  updated_at: string;
+  updated_at?: string;
   user?: {
     name: string;
   };

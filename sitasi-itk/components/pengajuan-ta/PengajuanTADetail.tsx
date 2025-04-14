@@ -31,11 +31,10 @@ const formatDate = (dateString: string) => {
   });
 };
 
-
 interface PengajuanTADetailProps {
   pengajuan: PengajuanTA;
-  onApprove?: (isPembimbing1: boolean) => void;
-  onReject?: (isPembimbing1: boolean, reason: string) => void;
+  onApprove?: () => void;
+  onReject?: (isFirstSupervisor: boolean, reason: string) => void;
   onRevision?: (notes: string) => void;
   userRole: 'mahasiswa' | 'dosen' | 'tendik' | 'koorpro';
   isPembimbing1?: boolean;
@@ -74,17 +73,14 @@ export function PengajuanTADetail({
       return;
     }
     
-    if (isPembimbing1) {
-      onApprove(true);
-    } else if (isPembimbing2) {
-      onApprove(false);
-    }
+    onApprove();
   };
   
   // Handle rejection
   const handleReject = () => {
     if (!onReject || !rejectReason) return;
     
+    // Call with both parameters: isFirstSupervisor and reason
     onReject(isPembimbing1, rejectReason);
     setShowRejectModal(false);
     setRejectReason('');
@@ -94,6 +90,7 @@ export function PengajuanTADetail({
   const handleRevision = () => {
     if (!onRevision || !revisionNotes) return;
     
+    // Only pass notes parameter
     onRevision(revisionNotes);
     setShowRevisionModal(false);
     setRevisionNotes('');
@@ -103,16 +100,16 @@ export function PengajuanTADetail({
   const hasApproved = isPembimbing1 ? pengajuan.approve_pembimbing1 : 
                       isPembimbing2 ? pengajuan.approve_pembimbing2 : false;
 
-                      useEffect(() => {
-                        console.log("Pembimbing status:", {
-                          isPembimbing1, 
-                          isPembimbing2,
-                          approve_pembimbing1: pengajuan.approve_pembimbing1,
-                          approve_pembimbing2: pengajuan.approve_pembimbing2,
-                          isApprovable,
-                          hasApproved
-                        });
-                      }, [isPembimbing1, isPembimbing2, pengajuan.approve_pembimbing1, pengajuan.approve_pembimbing2, isApprovable, hasApproved]);
+  useEffect(() => {
+    console.log("Pembimbing status:", {
+      isPembimbing1, 
+      isPembimbing2,
+      approve_pembimbing1: pengajuan.approve_pembimbing1,
+      approve_pembimbing2: pengajuan.approve_pembimbing2,
+      isApprovable,
+      hasApproved
+    });
+  }, [isPembimbing1, isPembimbing2, pengajuan.approve_pembimbing1, pengajuan.approve_pembimbing2, isApprovable, hasApproved]);
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -207,22 +204,6 @@ export function PengajuanTADetail({
             </div>
 
           </CardContent>
-          {/* Debug panel untuk approval */}
-            {/* Debug panel removed
-              {isPembimbing1 || isPembimbing2 ? (
-                <div className="mt-4 p-2 bg-gray-50 rounded text-xs">
-                  <p>Status Approval Debug:</p>
-                  <ul className="list-disc pl-4 mt-1">
-                    <li>Role: {isPembimbing1 ? "Pembimbing 1" : "Pembimbing 2"}</li>
-                    <li>Approval Status: {isPembimbing1 ? 
-                      (pengajuan.approve_pembimbing1 ? "Sudah disetujui" : "Belum disetujui") : 
-                      (pengajuan.approve_pembimbing2 ? "Sudah disetujui" : "Belum disetujui")}</li>
-                    <li>IsApprovable: {isApprovable ? "Ya" : "Tidak"}</li>
-                    <li>hasApproved: {hasApproved ? "Ya" : "Tidak"}</li>
-                  </ul>
-                </div>
-              ) : null}
-              */}
           <CardFooter className="flex flex-wrap gap-2">
             {userRole === 'mahasiswa' && pengajuan.status !== 'approved' && (
               <Button variant="outline" asChild>
@@ -276,7 +257,7 @@ export function PengajuanTADetail({
             
             {(userRole === 'tendik' || userRole === 'koorpro') && (
               <Button asChild variant="outline">
-                <Link href={`/dashboard/data-pengajuan/edit/${pengajuan.id}`}>
+                <Link href={`/dashboard/pengajuan/admin-edit/${pengajuan.id}`}>
                   <FileEdit className="h-4 w-4 mr-2" />
                   Edit Status
                 </Link>

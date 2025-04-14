@@ -1,4 +1,3 @@
-// app/dashboard/pengajuan/[id]/page.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -6,8 +5,6 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { PengajuanTADetail } from '@/components/pengajuan-ta/PengajuanTADetail';
 import { usePengajuanTADetail, useApprovePengajuanTA, useUpdatePengajuanTA } from '@/hooks/usePengajuanTA';
-import { useMahasiswaByUserId } from '@/hooks/useMahasiswas';
-import { useDosenByUserId } from '@/hooks/useDosens';
 import { UserRole } from '@/types/auth';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
@@ -28,149 +25,117 @@ export default function PengajuanDetailPage({ params }: { params: { id: string }
   const [isPembimbing2, setIsPembimbing2] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   
-  // Fetch mahasiswa data if user is a student
-  const { data: mahasiswaData } = useMahasiswaByUserId(
-    user?.roles.includes('mahasiswa') ? user.id : ''
-  );
-  
-  // Fetch dosen data if user is a lecturer
-  const { data: dosenData } = useDosenByUserId(
-    user?.roles.includes('dosen') ? user.id : ''
-  );
-  
-  // Set mahasiswaId, dosenId, and check if user is pembimbing 1 or 2
-  useEffect(() => {
-    if (mahasiswaData) {
-      setMahasiswaId(mahasiswaData.id);
-    }
-    
-    if (dosenData && pengajuan) {
-      setDosenId(dosenData.id);
-      
-      // For dosen, we need to check against user_id instead of dosen.id
-      setIsPembimbing1(pengajuan.pembimbing_1 === user?.id);
-      setIsPembimbing2(pengajuan.pembimbing_2 === user?.id);
-    }
-  }, [mahasiswaData, dosenData, pengajuan, user?.id]);
-  
   // Set user role
   useEffect(() => {
-    if (user?.roles.includes('koorpro')) {
+    if (!user?.roles) return;
+    
+    if (user.roles.includes('koorpro')) {
       setUserRole('koorpro');
-    } else if (user?.roles.includes('tendik')) {
+    } else if (user.roles.includes('tendik')) {
       setUserRole('tendik');
-    } else if (user?.roles.includes('dosen')) {
+    } else if (user.roles.includes('dosen')) {
       setUserRole('dosen');
     } else {
       setUserRole('mahasiswa');
     }
   }, [user]);
-
+  
+  // Determine mahasiswa ID for access control
   useEffect(() => {
-    if (pengajuan) {
-      console.log("Pengajuan data loaded:", pengajuan);
-      console.log("Current user role:", userRole);
-      console.log("Is user pembimbing1:", isPembimbing1);
-      console.log("Is user pembimbing2:", isPembimbing2);
-    }
-  }, [pengajuan, userRole, isPembimbing1, isPembimbing2]);
-  
-  
-  // In app/dashboard/pengajuan/[id]/page.tsx - Update the handleApprove function
-
-const handleApprove = async () => {
-  if (!pengajuan || !user?.id) return;
-  
-  setIsProcessing(true);
-  console.log("Starting approval with user:", user.id, "and pengajuan:", pengajuan.id);
-  
-  try {
-    // Debug untuk memeriksa struktur pengajuan dan status isPembimbing
-    console.log("Debug approving proposal:", {
-      pengajuanId: pengajuan.id,
-      status: pengajuan.status,
-      isPembimbing1,
-      isPembimbing2,
-      approve_pembimbing1: pengajuan.approve_pembimbing1,
-      approve_pembimbing2: pengajuan.approve_pembimbing2
-    });
-    
-    // Get mahasiswa user_id for notification
-    const { data: mahasiswaInfo, error: mahasiswaError } = await supabase
-      .from('mahasiswas')
-      .select('user_id')
-      .eq('id', pengajuan.mahasiswa_id)
-      .single();
+    async function fetchMahasiswaData() {
+      if (!user || !user.roles?.includes('mahasiswa')) return;
       
-    if (mahasiswaError) {
-      console.error('Error fetching mahasiswa:', mahasiswaError);
-      throw new Error('Gagal mendapatkan informasi mahasiswa');
-    }
-    
-    // IMPORTANT: Create a history record first regardless of approval outcome
-    // This helps ensure there's always history data for all roles to see
-    const { error: historyError } = await supabase
-      .from('riwayat_pengajuans')
-      .insert([{
-        pengajuan_ta_id: pengajuan.id,
-        user_id: user.id,
-        riwayat: isPembimbing1 ? 'Pemeriksaan oleh Pembimbing 1' : 'Pemeriksaan oleh Pembimbing 2',
-        keterangan: 'Proposal sedang diperiksa',
-        status: 'processing',
-      }]);
-    
-    if (historyError) {
-      console.error('Error creating initial history record:', historyError);
-      // Continue even if this fails
-    }
-    
-    // Call the mutation with detailed logging
-    console.log("Calling approvePengajuan with params:", {
-      id: pengajuan.id,
-      isPembimbing1,
-      dosenId: user.id,
-      mahasiswaId: mahasiswaInfo.user_id
-    });
-    
-    approvePengajuan({
-      id: pengajuan.id,
-      isPembimbing1,
-      dosenId: user.id,
-      mahasiswaId: mahasiswaInfo.user_id
-    }, {
-      onSuccess: () => {
-        toast({
-          title: "Berhasil",
-          description: "Pengajuan tugas akhir telah disetujui.",
-        });
-        setIsProcessing(false);
-        
-        // Reload page after short delay
-        setTimeout(() => window.location.reload(), 1500);
-      },
-      onError: (error: any) => {
-        console.error('Full approval error:', error);
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: error.message || "Terjadi kesalahan saat menyetujui."
-        });
-        setIsProcessing(false);
+      try {
+        const { data, error } = await supabase
+          .from('mahasiswas')
+          .select('id')
+          .eq('user_id', user.id)
+          .single();
+          
+        if (data) {
+          setMahasiswaId(data.id);
+        }
+      } catch (err) {
+        console.error('Error fetching mahasiswa data:', err);
       }
-    });
-  } catch (error: any) {
-    console.error('Error in approval handler:', error);
-    toast({
-      variant: "destructive",
-      title: "Error",
-      description: error.message || "Terjadi kesalahan saat proses persetujuan."
-    });
-    setIsProcessing(false);
-  }
-};
+    }
+    
+    fetchMahasiswaData();
+  }, [user]);
+  
+  // Determine dosen role for access control
+  useEffect(() => {
+    if (!user || !pengajuan) return;
+    
+    // Check if user is a supervisor for this proposal
+    setIsPembimbing1(pengajuan.pembimbing_1 === user.id);
+    setIsPembimbing2(pengajuan.pembimbing_2 === user.id);
+  }, [user, pengajuan]);
+  
+  // Calculate access permissions
+  const isOwner = userRole === 'mahasiswa' && mahasiswaId && pengajuan?.mahasiswa_id === mahasiswaId;
+  const isSupervisor = userRole === 'dosen' && (isPembimbing1 || isPembimbing2);
+  const isAdmin = userRole === 'tendik' || userRole === 'koorpro';
+  
+  // Check if current user has already approved this proposal
+  const hasApproved = isPembimbing1 ? pengajuan?.approve_pembimbing1 : 
+                      isPembimbing2 ? pengajuan?.approve_pembimbing2 : false;
+  
+  const handleApprove = async () => {
+    if (!pengajuan || !user?.id || !isSupervisor) return;
+    
+    setIsProcessing(true);
+    
+    try {
+      // Get mahasiswa user_id for notification
+      const { data: mahasiswaInfo, error: mahasiswaError } = await supabase
+        .from('mahasiswas')
+        .select('user_id')
+        .eq('id', pengajuan.mahasiswa_id)
+        .single();
+        
+      if (mahasiswaError) {
+        throw new Error('Gagal mendapatkan informasi mahasiswa');
+      }
+      
+      // Call the approvePengajuan mutation
+      approvePengajuan({
+        id: pengajuan.id,
+        isPembimbing1,
+        dosenId: user.id,
+        mahasiswaId: mahasiswaInfo.user_id
+      }, {
+        onSuccess: () => {
+          toast({
+            title: "Berhasil",
+            description: "Pengajuan tugas akhir telah disetujui.",
+          });
+          setIsProcessing(false);
+          
+          // Reload page after short delay
+          setTimeout(() => window.location.reload(), 1500);
+        },
+        onError: (error: any) => {
+          toast({
+            variant: "destructive",
+            title: "Error",
+            description: error.message || "Terjadi kesalahan saat menyetujui."
+          });
+          setIsProcessing(false);
+        }
+      });
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message || "Terjadi kesalahan saat proses persetujuan."
+      });
+      setIsProcessing(false);
+    }
+  };
   
   const handleReject = async (isFirstSupervisor: boolean, reason: string) => {
-    if (!pengajuan || !user?.id || !reason) return;
+    if (!pengajuan || !user?.id || !isSupervisor || !reason) return;
     
     setIsProcessing(true);
     
@@ -178,51 +143,41 @@ const handleApprove = async () => {
       // Update the pengajuan status to rejected
       updatePengajuan({
         id: pengajuan.id,
-        data: {
-          status: 'rejected'
-        },
+        data: { status: 'rejected' },
         userId: user.id
       }, {
         onSuccess: async () => {
-          // Add rejection reason to riwayat_pengajuans
-          const { error: historyError } = await supabase
-            .from('riwayat_pengajuans')
-            .insert([{
-              pengajuan_ta_id: pengajuan.id,
-              user_id: user.id,
-              riwayat: 'Ditolak',
-              keterangan: `Ditolak dengan alasan: ${reason}`,
-              status: 'rejected',
-            }]);
-          
-          if (historyError) {
-            console.error('Error adding rejection history:', historyError);
-          }
-          
-          // Get mahasiswa user_id for notification
-          const { data: mahasiswaInfo, error: mahasiswaError } = await supabase
-            .from('mahasiswas')
-            .select('user_id, nama')
-            .eq('id', pengajuan.mahasiswa_id)
-            .single();
-            
-          if (mahasiswaError) {
-            console.error('Error fetching mahasiswa for notification:', mahasiswaError);
-          } else {
-            // Send notification to student
-            const { error: notifError } = await supabase
-              .from('notifikasis')
+          // Add rejection history record and notification
+          try {
+            await supabase
+              .from('riwayat_pengajuans')
               .insert([{
-                from_user: user.id,
-                to_user: mahasiswaInfo.user_id,
-                judul: 'Pengajuan TA Ditolak',
-                pesan: `Pengajuan tugas akhir Anda ditolak${isFirstSupervisor ? ' oleh Pembimbing 1' : ' oleh Pembimbing 2'} dengan alasan: ${reason}`,
-                is_read: false
+                pengajuan_ta_id: pengajuan.id,
+                user_id: user.id,
+                riwayat: 'Ditolak',
+                keterangan: `Ditolak dengan alasan: ${reason}`,
+                status: 'rejected',
               }]);
               
-            if (notifError) {
-              console.error('Error sending rejection notification:', notifError);
+            const { data: mahasiswaInfo } = await supabase
+              .from('mahasiswas')
+              .select('user_id, nama')
+              .eq('id', pengajuan.mahasiswa_id)
+              .single();
+              
+            if (mahasiswaInfo) {
+              await supabase
+                .from('notifikasis')
+                .insert([{
+                  from_user: user.id,
+                  to_user: mahasiswaInfo.user_id,
+                  judul: 'Pengajuan TA Ditolak',
+                  pesan: `Pengajuan tugas akhir Anda ditolak${isPembimbing1 ? ' oleh Pembimbing 1' : ' oleh Pembimbing 2'} dengan alasan: ${reason}`,
+                  is_read: false
+                }]);
             }
+          } catch (notifError) {
+            console.error('Error in notification/history:', notifError);
           }
           
           toast({
@@ -231,12 +186,9 @@ const handleApprove = async () => {
           });
           
           setIsProcessing(false);
-          
-          // Navigate back to list
           router.push('/dashboard/pengajuan');
         },
         onError: (error) => {
-          console.error('Error rejecting pengajuan:', error);
           toast({
             variant: "destructive",
             title: "Error",
@@ -245,19 +197,18 @@ const handleApprove = async () => {
           setIsProcessing(false);
         }
       });
-    } catch (error) {
-      console.error('Error in rejection process:', error);
+    } catch (error: any) {
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Terjadi kesalahan saat menolak pengajuan.",
+        description: error.message || "Terjadi kesalahan saat menolak pengajuan.",
       });
       setIsProcessing(false);
     }
   };
   
   const handleRevision = async (notes: string) => {
-    if (!pengajuan || !user?.id || !notes) return;
+    if (!pengajuan || !user?.id || !isSupervisor || !notes) return;
     
     setIsProcessing(true);
     
@@ -265,51 +216,43 @@ const handleApprove = async () => {
       // Update the pengajuan status to revision
       updatePengajuan({
         id: pengajuan.id,
-        data: {
-          status: 'revision'
-        },
+        data: { status: 'revision' },
         userId: user.id
       }, {
         onSuccess: async () => {
           // Add revision notes to riwayat_pengajuans
-          const { error: historyError } = await supabase
-            .from('riwayat_pengajuans')
-            .insert([{
-              pengajuan_ta_id: pengajuan.id,
-              user_id: user.id,
-              riwayat: 'Perlu Revisi',
-              keterangan: `Perlu revisi: ${notes}`,
-              status: 'revision',
-            }]);
-          
-          if (historyError) {
-            console.error('Error adding revision history:', historyError);
-          }
-          
-          // Get mahasiswa user_id for notification
-          const { data: mahasiswaInfo, error: mahasiswaError } = await supabase
-            .from('mahasiswas')
-            .select('user_id, nama')
-            .eq('id', pengajuan.mahasiswa_id)
-            .single();
-            
-          if (mahasiswaError) {
-            console.error('Error fetching mahasiswa for notification:', mahasiswaError);
-          } else {
-            // Send notification to student
-            const { error: notifError } = await supabase
-              .from('notifikasis')
+          try {
+            await supabase
+              .from('riwayat_pengajuans')
               .insert([{
-                from_user: user.id,
-                to_user: mahasiswaInfo.user_id,
-                judul: 'Pengajuan TA Perlu Revisi',
-                pesan: `Pengajuan tugas akhir Anda perlu direvisi${isPembimbing1 ? ' menurut Pembimbing 1' : ' menurut Pembimbing 2'}: ${notes}`,
-                is_read: false
+                pengajuan_ta_id: pengajuan.id,
+                user_id: user.id,
+                riwayat: 'Perlu Revisi',
+                keterangan: `Perlu revisi: ${notes}`,
+                status: 'revision',
               }]);
               
-            if (notifError) {
-              console.error('Error sending revision notification:', notifError);
+            // Get mahasiswa user_id for notification
+            const { data: mahasiswaInfo } = await supabase
+              .from('mahasiswas')
+              .select('user_id, nama')
+              .eq('id', pengajuan.mahasiswa_id)
+              .single();
+              
+            if (mahasiswaInfo) {
+              // Send notification to student
+              await supabase
+                .from('notifikasis')
+                .insert([{
+                  from_user: user.id,
+                  to_user: mahasiswaInfo.user_id,
+                  judul: 'Pengajuan TA Perlu Revisi',
+                  pesan: `Pengajuan tugas akhir Anda perlu direvisi${isPembimbing1 ? ' menurut Pembimbing 1' : ' menurut Pembimbing 2'}: ${notes}`,
+                  is_read: false
+                }]);
             }
+          } catch (err) {
+            console.error('Error in revision process:', err);
           }
           
           toast({
@@ -318,12 +261,9 @@ const handleApprove = async () => {
           });
           
           setIsProcessing(false);
-          
-          // Navigate back to list
           router.push('/dashboard/pengajuan');
         },
         onError: (error) => {
-          console.error('Error requesting revision:', error);
           toast({
             variant: "destructive",
             title: "Error",
@@ -332,12 +272,11 @@ const handleApprove = async () => {
           setIsProcessing(false);
         }
       });
-    } catch (error) {
-      console.error('Error in revision process:', error);
+    } catch (error: any) {
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Terjadi kesalahan saat meminta revisi.",
+        description: error.message || "Terjadi kesalahan saat meminta revisi.",
       });
       setIsProcessing(false);
     }
@@ -365,6 +304,12 @@ const handleApprove = async () => {
     );
   }
   
+  // Calculate action permissions based on role and status
+  const canApprove = isSupervisor && pengajuan.status !== 'approved' && !hasApproved && !isProcessing;
+  const canReject = isSupervisor && pengajuan.status !== 'approved' && !hasApproved && !isProcessing;
+  const canRevise = isSupervisor && pengajuan.status !== 'approved' && !hasApproved && !isProcessing;
+  const canEdit = isOwner && pengajuan.status !== 'approved' && !isProcessing;
+  
   return (
     <div>
       <div className="mb-6">
@@ -372,8 +317,6 @@ const handleApprove = async () => {
         <p className="mt-1 text-sm text-gray-500">
           Lihat detail dan status pengajuan tugas akhir
         </p>
-        {/* Add this to debug the pengajuan id */}
-        <p className="hidden text-xs text-gray-400">ID: {pengajuan.id}</p>
       </div>
       
       <PengajuanTADetail 
@@ -381,7 +324,7 @@ const handleApprove = async () => {
         userRole={userRole}
         isPembimbing1={isPembimbing1}
         isPembimbing2={isPembimbing2}
-        isApprovable={(isPembimbing1 || isPembimbing2) && pengajuan.status !== 'approved' && !isProcessing}
+        isApprovable={canApprove}
         onApprove={handleApprove}
         onReject={handleReject}
         onRevision={handleRevision}

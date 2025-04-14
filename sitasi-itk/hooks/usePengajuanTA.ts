@@ -6,25 +6,95 @@ import { supabase } from '../lib/supabase';
 import { PengajuanTA, PengajuanTAFormValues, RiwayatPengajuan } from '../types/pengajuan-ta';
 import { useToast } from './use-toast';
 import { useAuth } from '@/contexts/AuthContext';
+import { UserRole } from '@/types/auth';
+
+// Perbaikan di hooks/usePengajuanTA.ts
 
 // Fetch all thesis proposals
 export function usePengajuanTAs() {
+  const { user } = useAuth();
+  
   return useQuery({
-    queryKey: ['pengajuan-ta'],
+    queryKey: ['pengajuan-ta', 'all', user?.id],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('pengajuan_tas')
-        .select(`
-          *,
-          mahasiswa:mahasiswa_id (nama, nim, email, nomor_telepon),
-          dosen_pembimbing1:pembimbing_1 (nama_dosen, nip, email),
-          dosen_pembimbing2:pembimbing_2 (nama_dosen, nip, email)
-        `)
-        .order('created_at', { ascending: false });
-      
-      if (error) throw error;
-      return data as PengajuanTA[];
+      try {
+        console.log("Mengambil semua data pengajuan untuk admin");
+        
+        // Verifikasi jika user memiliki akses admin
+        if (!user?.roles.includes('tendik') && !user?.roles.includes('koorpro')) {
+          console.log("User tidak memiliki akses admin", user?.roles);
+        }
+        
+        // Coba kueri dasar dulu (tanpa join)
+        const { data: basicData, error: basicError } = await supabase
+          .from('pengajuan_tas')
+          .select('*')
+          .order('created_at', { ascending: false });
+          
+        if (basicError) {
+          console.error("Error kueri dasar:", basicError);
+          throw basicError;
+        }
+        
+        console.log(`Ditemukan ${basicData?.length || 0} pengajuan dalam kueri dasar`);
+        
+        // Kemudian lakukan kueri lengkap dengan join
+        const { data, error } = await supabase
+          .from('pengajuan_tas')
+          .select(`
+            *,
+            mahasiswa:mahasiswa_id (nama, nim, email, nomor_telepon)
+          `)
+          .order('created_at', { ascending: false });
+        
+        if (error) {
+          console.error("Error kueri lengkap:", error);
+          throw error;
+        }
+        
+        console.log(`Ditemukan ${data?.length || 0} pengajuan dengan info mahasiswa`);
+        
+        // Tambahkan informasi pembimbing secara manual karena join rumit
+        const result = await Promise.all(data.map(async (item) => {
+          try {
+            // Ambil data pembimbing 1
+            const { data: pembimbing1Data, error: p1Error } = await supabase
+              .from('dosens')
+              .select('*')
+              .eq('user_id', item.pembimbing_1)
+              .single();
+              
+            // Ambil data pembimbing 2
+            const { data: pembimbing2Data, error: p2Error } = await supabase
+              .from('dosens')
+              .select('*')
+              .eq('user_id', item.pembimbing_2)
+              .single();
+              
+            return {
+              ...item,
+              dosen_pembimbing1: pembimbing1Data || null,
+              dosen_pembimbing2: pembimbing2Data || null
+            };
+          } catch (err) {
+            console.error("Error saat mengambil data dosen:", err);
+            return {
+              ...item,
+              dosen_pembimbing1: null,
+              dosen_pembimbing2: null
+            };
+          }
+        }));
+        
+        console.log(`Berhasil menyiapkan ${result.length} data lengkap`);
+        return result as PengajuanTA[];
+      } catch (error) {
+        console.error("Error tak terduga di usePengajuanTAs:", error);
+        // Return array kosong untuk mencegah crash
+        return [];
+      }
     },
+    enabled: !!user?.id,
   });
 }
 
@@ -60,6 +130,161 @@ export function useStudentPengajuanTA(mahasiswaId: string) {
       return data as PengajuanTA[];
     },
     enabled: !!mahasiswaId,
+  });
+}
+
+// Add this to hooks/usePengajuanTA.ts
+export function useConsolidatedPengajuanTA(userRole: UserRole, userId: string) {
+  return useQuery({
+    queryKey: ['pengajuan-consolidated', userRole, userId],
+    queryFn: async () => {
+      if (!userId) return [];
+      
+      try {
+        // For students, fetch their proposals
+        if (userRole === 'mahasiswa') {
+          // Get mahasiswa_id from user_id
+          const { data: mahasiswaData, error: mahasiswaError } = await supabase
+            .from('mahasiswas')
+            .select('id')
+            .eq('user_id', userId)
+            .single();
+            
+          if (mahasiswaError || !mahasiswaData) {
+            console.error("Error fetching mahasiswa id:", mahasiswaError);
+            return [];
+          }
+          
+          // Get proposals for this mahasiswa
+          const { data, error } = await supabase
+            .from('pengajuan_tas')
+            .select(`
+              *,
+              mahasiswa:mahasiswa_id (nama, nim, email, nomor_telepon),
+              dosen_pembimbing1:pembimbing_1 (nama_dosen, nip, email),
+              dosen_pembimbing2:pembimbing_2 (nama_dosen, nip, email)
+            `)
+            .eq('mahasiswa_id', mahasiswaData.id)
+            .order('created_at', { ascending: false });
+            
+          if (error) {
+            console.error("Error fetching student proposals:", error);
+            return [];
+          }
+            
+          return data as PengajuanTA[];
+        }
+        
+        // For lecturers, fetch proposals they supervise
+        if (userRole === 'dosen') {
+          // We need to query by user_id (not dosen.id)
+          const { data, error } = await supabase
+            .from('pengajuan_tas')
+            .select(`
+              *,
+              mahasiswa:mahasiswa_id (nama, nim, email, nomor_telepon)
+            `);
+            
+          if (error) {
+            console.error("Error fetching lecturer proposals:", error);
+            return [];
+          }
+          
+          // Filter on the client side for proposals where this lecturer is pembimbing1 or pembimbing2
+          const filteredData = data.filter(p => 
+            p.pembimbing_1 === userId || p.pembimbing_2 === userId
+          );
+          
+          // Add supervisor data to each proposal
+          for (const proposal of filteredData) {
+            try {
+              // Get pembimbing1 data
+              if (proposal.pembimbing_1) {
+                const { data: p1Data } = await supabase
+                  .from('dosens')
+                  .select('nama_dosen, nip, email')
+                  .eq('user_id', proposal.pembimbing_1)
+                  .single();
+                  
+                if (p1Data) {
+                  (proposal as any).dosen_pembimbing1 = p1Data;
+                }
+              }
+              
+              // Get pembimbing2 data
+              if (proposal.pembimbing_2) {
+                const { data: p2Data } = await supabase
+                  .from('dosens')
+                  .select('nama_dosen, nip, email')
+                  .eq('user_id', proposal.pembimbing_2)
+                  .single();
+                  
+                if (p2Data) {
+                  (proposal as any).dosen_pembimbing2 = p2Data;
+                }
+              }
+            } catch (err) {
+              console.error('Error fetching supervisor data:', err);
+            }
+          }
+            
+          return filteredData as PengajuanTA[];
+        }
+        
+        // For admins, fetch all proposals
+        const { data, error } = await supabase
+          .from('pengajuan_tas')
+          .select(`
+            *,
+            mahasiswa:mahasiswa_id (nama, nim, email, nomor_telepon)
+          `)
+          .order('created_at', { ascending: false });
+          
+        if (error) {
+          console.error("Error fetching all proposals:", error);
+          return [];
+        }
+        
+        // Add supervisor data to each proposal
+        for (const proposal of data) {
+          try {
+            // Get pembimbing1 data
+            if (proposal.pembimbing_1) {
+              const { data: p1Data } = await supabase
+                .from('dosens')
+                .select('nama_dosen, nip, email')
+                .eq('user_id', proposal.pembimbing_1)
+                .single();
+                
+              if (p1Data) {
+                (proposal as any).dosen_pembimbing1 = p1Data;
+              }
+            }
+            
+            // Get pembimbing2 data
+            if (proposal.pembimbing_2) {
+              const { data: p2Data } = await supabase
+                .from('dosens')
+                .select('nama_dosen, nip, email')
+                .eq('user_id', proposal.pembimbing_2)
+                .single();
+                
+              if (p2Data) {
+                (proposal as any).dosen_pembimbing2 = p2Data;
+              }
+            }
+          } catch (err) {
+            console.error('Error fetching supervisor data:', err);
+          }
+        }
+          
+        return data as PengajuanTA[];
+      } catch (error) {
+        console.error('Error in useConsolidatedPengajuanTA:', error);
+        return [];
+      }
+    },
+    enabled: !!userId,
   });
 }
 
@@ -475,127 +700,128 @@ export function useUpdatePengajuanTA() {
   });
 }
 
-// Supervisor approval mutation with correct ID usage
+// Update the useApprovePengajuanTA hook in hooks/usePengajuanTA.ts
 export function useApprovePengajuanTA() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   
-  return useMutation({
+  return useMutation<
+    { success: boolean; bothApproved: boolean },
+    Error,
+    { id: string; isPembimbing1: boolean; dosenId: string; mahasiswaId: string }
+  >({
     mutationFn: async ({ 
       id, 
       isPembimbing1, 
       dosenId, 
-      mahasiswaId
-    }: { 
-      id: string, 
-      isPembimbing1: boolean, 
-      dosenId: string,
-      mahasiswaId: string
+      mahasiswaId 
     }) => {
       try {
-        console.log(`Starting approval process for proposal ID:`, id);
+        console.log(`Processing approval for thesis proposal ID: ${id}`);
         
-        // Get current state
+        // 1. Get current state to check existing approvals
         const { data: current, error: fetchError } = await supabase
           .from('pengajuan_tas')
-          .select('approve_pembimbing1, approve_pembimbing2')
+          .select('approve_pembimbing1, approve_pembimbing2, status')
           .eq('id', id)
           .single();
           
         if (fetchError) {
-          console.error('Error fetching current state:', fetchError);
-          throw fetchError;
+          console.error('Error fetching current approval state:', fetchError);
+          throw new Error('Failed to check current approval status');
         }
         
-        // Prepare update data - HANYA update flag approval dan status jika keduanya disetujui
+        // 2. Prepare update data based on which supervisor is approving
         const updateData: Record<string, any> = {};
         
-        // Set approval flag
         if (isPembimbing1) {
           updateData.approve_pembimbing1 = true;
         } else {
           updateData.approve_pembimbing2 = true;
         }
         
-        // Cek apakah keduanya akan disetujui
+        // 3. Check if both approvals will be complete
         const willBothBeApproved = isPembimbing1 
-          ? current.approve_pembimbing2 === true  // Pembimbing 2 sudah approve sebelumnya
-          : current.approve_pembimbing1 === true; // Pembimbing 1 sudah approve sebelumnya
+          ? current.approve_pembimbing2 // If pembimbing1 is approving, check if pembimbing2 already approved
+          : current.approve_pembimbing1; // If pembimbing2 is approving, check if pembimbing1 already approved
         
-        // HANYA set status ke "approved" jika kedua pembimbing menyetujui
+        // 4. Only update status to "approved" if both supervisors approve
         if (willBothBeApproved) {
           updateData.status = 'approved';
         }
-        // JANGAN mencoba set status ke "approved_pembimbing1" atau "approved_pembimbing2"
-        // Karena nilai-nilai tersebut TIDAK ada dalam enum status_pengajuan
         
-        console.log('Update data to be sent:', updateData);
+        console.log('Update data:', updateData);
         
-        // Update the proposal
-        const { data: updatedData, error: updateError } = await supabase
+        // 5. Update the pengajuan_tas record
+        const { error: updateError } = await supabase
           .from('pengajuan_tas')
           .update(updateData)
-          .eq('id', id)
-          .select();
+          .eq('id', id);
           
         if (updateError) {
-          console.error('Error updating pengajuan:', updateError);
-          throw updateError;
+          console.error('Error updating thesis proposal:', updateError);
+          throw new Error('Failed to update approval status');
         }
         
-        console.log('Update successful, data:', updatedData);
-        
-        // Add history record - gunakan status 'approved' untuk history
+        // 6. Add history record
         const historyStatus = willBothBeApproved ? 'approved' : 'submitted';
-        const historyResult = await supabase
+        const historyDescription = isPembimbing1 
+          ? 'Proposal telah disetujui oleh Pembimbing 1' 
+          : 'Proposal telah disetujui oleh Pembimbing 2';
+          
+        const { error: historyError } = await supabase
           .from('riwayat_pengajuans')
           .insert([{
             pengajuan_ta_id: id,
             user_id: dosenId,
             riwayat: isPembimbing1 ? 'Disetujui Pembimbing 1' : 'Disetujui Pembimbing 2',
-            keterangan: isPembimbing1 
-              ? 'Proposal telah disetujui oleh Pembimbing 1' 
-              : 'Proposal telah disetujui oleh Pembimbing 2',
-            status: historyStatus, // Gunakan hanya nilai yang valid
+            keterangan: historyDescription,
+            status: historyStatus,
           }]);
           
-        // Send notification
-        const notifResult = await supabase
+        if (historyError) {
+          console.error('Error adding history record:', historyError);
+          // Continue despite history error
+        }
+        
+        // 7. Send notification to student
+        const { error: notifError } = await supabase
           .from('notifikasis')
           .insert([{
             from_user: dosenId,
             to_user: mahasiswaId,
             judul: isPembimbing1 ? 'Pembimbing 1 menyetujui proposal' : 'Pembimbing 2 menyetujui proposal',
-            pesan: isPembimbing1 
-              ? 'Proposal Anda telah disetujui oleh Pembimbing 1' 
-              : 'Proposal Anda telah disetujui oleh Pembimbing 2',
+            pesan: historyDescription + (willBothBeApproved ? '. Proposal telah disetujui oleh kedua pembimbing.' : ''),
             is_read: false
           }]);
+          
+        if (notifError) {
+          console.error('Error sending notification:', notifError);
+          // Continue despite notification error
+        }
         
-        return { success: true };
+        return { success: true, bothApproved: willBothBeApproved };
       } catch (error) {
-        console.error('Complete error details:', error);
-        throw error;
+        console.error('Error in approval process:', error);
+        throw error instanceof Error ? error : new Error('Unknown error in approval process');
       }
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['pengajuan-ta'] });
       queryClient.invalidateQueries({ queryKey: ['riwayat-pengajuan'] });
       
       toast({
         title: "Proposal Disetujui",
-        description: "Proposal tugas akhir telah disetujui.",
+        description: result.bothApproved 
+          ? "Proposal tugas akhir telah disetujui oleh kedua pembimbing."
+          : "Proposal tugas akhir telah disetujui.",
       });
-      
-      // Reload halaman setelah sukses
-      setTimeout(() => window.location.reload(), 1500);
     },
-    onError: (error) => {
-      console.error('Approval error:', error);
+    onError: (error: Error) => {
       toast({
         variant: "destructive",
         title: "Gagal Menyetujui",
-        description: error instanceof Error ? error.message : "Terjadi kesalahan saat menyetujui proposal."
+        description: error.message || "Terjadi kesalahan saat menyetujui proposal."
       });
     },
   });
