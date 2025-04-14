@@ -1,4 +1,4 @@
-// Updated PengajuanTAForm.tsx to fix foreign key constraints issue
+// components/pengajuan-ta/PengajuanTAForm.tsx
 import React, { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -9,9 +9,9 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/componen
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useDosens } from '@/hooks/useDosens';
-import { Select, Option } from "@/components/ui/select"; // Import the simplified components
+import { Select, Option } from "@/components/ui/select"; // Import komponen sederhana
 
-// Define the form schema with Zod
+// Schema validasi form dengan Zod
 const formSchema = z.object({
   judul: z.string().min(10, 'Judul minimal 10 karakter'),
   bidang_penelitian: z.string().min(3, 'Bidang penelitian harus diisi'),
@@ -53,10 +53,10 @@ export function PengajuanTAForm({
     }
   });
 
-  // When editing, ensure we use the correct default values
+  // Saat edit, pastikan kita menggunakan nilai default yang benar
   useEffect(() => {
     if (isEditing && defaultValues) {
-      console.log("Setting default values for editing:", defaultValues);
+      console.log("Setting nilai default untuk edit:", defaultValues);
       setValue('judul', defaultValues.judul || '');
       setValue('bidang_penelitian', defaultValues.bidang_penelitian || '');
       setValue('pembimbing_1', defaultValues.pembimbing_1 || '');
@@ -64,16 +64,27 @@ export function PengajuanTAForm({
     }
   }, [isEditing, defaultValues, setValue]);
 
+  // Log data dosen untuk debugging
+  useEffect(() => {
+    if (dosens) {
+      console.log("Dosen yang tersedia:", dosens.length);
+      dosens.forEach((dosen, idx) => {
+        if (idx < 3) { // Hanya log beberapa untuk debug
+          console.log(`Dosen ${idx+1}: id=${dosen.id}, user_id=${dosen.user_id}, nama=${dosen.nama_dosen}`);
+        }
+      });
+    }
+  }, [dosens]);
+
   const handleFormSubmit = (data: PengajuanTAFormValues) => {
-    // Log the form data being submitted
-    console.log("Submitting form data:", data);
+    console.log("Mengirim data form:", data);
     onSubmit(data);
   };
 
-  // Watch for pembimbing_1 to filter pembimbing_2 options
+  // Pantau pembimbing_1 untuk filter opsi pembimbing_2
   const pembimbing1 = watch('pembimbing_1');
 
-  // Research fields
+  // Bidang penelitian
   const researchFields = [
     "Data Science",
     "Artificial Intelligence",
@@ -86,13 +97,6 @@ export function PengajuanTAForm({
     "Cybersecurity",
     "Human-Computer Interaction"
   ];
-
-  // Log the current dosens data to help debug
-  useEffect(() => {
-    if (dosens) {
-      console.log("Available dosens:", dosens);
-    }
-  }, [dosens]);
 
   return (
     <Card className="w-full">
@@ -138,6 +142,7 @@ export function PengajuanTAForm({
               {isLoadingDosens ? (
                 <Option value="" disabled>Loading...</Option>
               ) : dosens?.map(dosen => (
+                // PENTING: Gunakan user_id sebagai value, bukan dosen.id
                 <Option key={dosen.id} value={dosen.user_id}>
                   {dosen.nama_dosen} - {dosen.nip}
                 </Option>
@@ -161,6 +166,7 @@ export function PengajuanTAForm({
               {isLoadingDosens ? (
                 <Option value="" disabled>Loading...</Option>
               ) : dosens?.filter(dosen => dosen.user_id !== pembimbing1).map(dosen => (
+                // PENTING: Gunakan user_id sebagai value, bukan dosen.id
                 <Option key={dosen.id} value={dosen.user_id}>
                   {dosen.nama_dosen} - {dosen.nip}
                 </Option>

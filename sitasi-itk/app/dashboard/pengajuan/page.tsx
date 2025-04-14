@@ -3,7 +3,10 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { PengajuanTAList } from '@/components/pengajuan-ta/PengajuanTAList';
-import { useConsolidatedPengajuanTA } from '@/hooks/usePengajuanTA';
+import { 
+  useConsolidatedPengajuanTA, 
+  useMahasiswaPengajuanTA  // Gunakan hook baru
+} from '@/hooks/usePengajuanTA';
 import { UserRole } from '@/types/auth';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
@@ -31,13 +34,22 @@ export default function PengajuanPage() {
     }
   }, [user]);
   
-  // Use the consolidated hook for data fetching
-  const { data: pengajuanData, isLoading } = useConsolidatedPengajuanTA(
-    userRole, 
+  // Gunakan hook yang berbeda berdasarkan peran pengguna
+  const { data: adminDosenData, isLoading: isLoadingAdminDosen } = useConsolidatedPengajuanTA(
+    userRole === 'mahasiswa' ? '' : userRole, 
     user?.id || ''
   );
   
-  // For dosen view, filter proposals based on their status
+  // Khusus untuk mahasiswa, gunakan hook baru yang lebih sederhana & langsung
+  const { data: mahasiswaData, isLoading: isLoadingMahasiswa } = useMahasiswaPengajuanTA(
+    userRole === 'mahasiswa' ? user?.id || '' : ''
+  );
+  
+  // Kombinasikan data sesuai peran
+  const pengajuanData = userRole === 'mahasiswa' ? mahasiswaData : adminDosenData;
+  const isLoading = userRole === 'mahasiswa' ? isLoadingMahasiswa : isLoadingAdminDosen;
+  
+  // Untuk dosen view, filter proposals based on their status
   const pendingProposals = userRole === 'dosen' 
     ? pengajuanData?.filter(p => 
         (p.pembimbing_1 === user?.id && !p.approve_pembimbing1) || 
@@ -55,6 +67,13 @@ export default function PengajuanPage() {
   const toggleDebugInfo = () => {
     setShowDebugInfo(!showDebugInfo);
   };
+  
+  // Untuk debugging di konsol
+  useEffect(() => {
+    if (pengajuanData) {
+      console.log(`Ditemukan ${pengajuanData.length} pengajuan untuk ${userRole}`);
+    }
+  }, [pengajuanData, userRole]);
   
   return (
     <div>
