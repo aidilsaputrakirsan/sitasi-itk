@@ -1,7 +1,8 @@
+// app/api/upload/route.ts - Perbaikan error TypeScript
+
 import { NextRequest, NextResponse } from 'next/server';
 import { initializeApp } from 'firebase/app';
 import { getStorage, ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
-import { v4 as uuidv4 } from 'uuid';
 
 // Initialize Firebase
 const firebaseConfig = {
@@ -13,7 +14,16 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID
 };
 
-const app = initializeApp(firebaseConfig);
+// Inisialisasi Firebase hanya sekali
+let app;
+try {
+  if (!app) {
+    app = initializeApp(firebaseConfig);
+  }
+} catch (error) {
+  console.error("Firebase initialization error:", error);
+}
+
 const storage = getStorage(app);
 
 export async function POST(request: NextRequest) {
@@ -22,17 +32,15 @@ export async function POST(request: NextRequest) {
     const file = formData.get('file') as File;
     
     if (!file) {
+      console.error("No file provided in form data");
       return NextResponse.json({ error: 'No file provided' }, { status: 400 });
     }
     
-    // Get metadata and path
-    const metadataStr = formData.get('metadata') as string;
-    const metadata = metadataStr ? JSON.parse(metadataStr) : {};
-    const providedPath = formData.get('path') as string;
-
-    // Create unique path if not provided
-    const fileExt = file.name.split('.').pop();
-    const path = providedPath || `sempro/${uuidv4()}/${Date.now()}.${fileExt}`;
+    console.log("File received:", file.name, file.size, file.type);
+    
+    // Get path from form data
+    const path = formData.get('path') as string || `sempro/${Date.now()}_${file.name}`;
+    console.log("Upload path:", path);
     
     // Convert file to array buffer
     const bytes = await file.arrayBuffer();
@@ -41,21 +49,32 @@ export async function POST(request: NextRequest) {
     // Upload to Firebase Storage
     const storageRef = ref(storage, path);
     const uploadTask = uploadBytesResumable(storageRef, buffer, { 
-      contentType: file.type,
-      customMetadata: metadata
+      contentType: file.type
     });
     
     // Wait for upload to complete
-    await new Promise((resolve, reject) => {
+    const snapshot = await new Promise((resolve, reject) => {
       uploadTask.on('state_changed', 
-        (snapshot) => {}, 
-        (error) => reject(error),
-        () => resolve(null)
+        (snapshot) => {
+          // Log progress for debugging
+          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+          console.log(`Upload progress: ${progress}%`);
+        }, 
+        (error) => {
+          console.error("Firebase upload error:", error);
+          reject(error);
+        },
+        () => {
+          resolve(uploadTask.snapshot);
+        }
       );
     });
     
+    console.log("Upload completed successfully");
+    
     // Get download URL
     const downloadURL = await getDownloadURL(storageRef);
+    console.log("Download URL obtained:", downloadURL);
     
     return NextResponse.json({
       fileId: path,
@@ -64,8 +83,12 @@ export async function POST(request: NextRequest) {
       fileType: file.type,
       uploadedAt: new Date().toISOString()
     });
-  } catch (error) {
-    console.error('Upload error:', error);
-    return NextResponse.json({ error: 'Upload failed' }, { status: 500 });
+  } catch (error: any) { // Perbaikan disini: menambahkan type assertion ": any"
+    console.error("Server-side upload error:", error);
+    return NextResponse.json({ 
+      error: 'Upload failed', 
+      message: error.message || 'Unknown error',
+      stack: process.env.NODE_ENV === 'production' ? undefined : error.stack
+    }, { status: 500 });
   }
 }

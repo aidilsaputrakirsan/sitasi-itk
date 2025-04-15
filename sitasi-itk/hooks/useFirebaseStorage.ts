@@ -1,4 +1,4 @@
-// hooks/useFirebaseStorage.ts
+// hooks/useFirebaseStorage.ts - Perbaikan
 'use client';
 
 import { useState, useCallback } from 'react';
@@ -32,19 +32,12 @@ export function useFirebaseStorage() {
         return null;
       }
 
-      if (!user) {
-        toast({
-          variant: "destructive",
-          title: "Error Upload",
-          description: "User tidak terautentikasi",
-        });
-        return null;
-      }
-
       setIsUploading(true);
       setUploadProgress(0);
 
       try {
+        console.log("Starting upload for:", file.name, "Size:", file.size);
+        
         // Buat formdata untuk request
         const formData = new FormData();
         formData.append('file', file);
@@ -55,48 +48,42 @@ export function useFirebaseStorage() {
         const fileType = options?.description?.toLowerCase().replace(/\s+/g, '_') || 'document';
         const studentId = options?.studentId || 'unknown';
         
-        // Format: sempro/{userId}/{studentId}/{fileType}_{timestamp}.{extension}
-        const path = `sempro/${user.id}/${studentId}/${fileType}_${timestamp}.${fileExtension}`;
+        // Format sederhana untuk path file
+        const path = `sempro/${timestamp}_${file.name}`;
         formData.append('path', path);
         
-        // Tambahkan metadata
-        const metadata = {
-          uploadedBy: user.id,
-          studentId: options?.studentId || '',
-          studentName: options?.studentName || '',
-          description: options?.description || '',
-          originalName: file.name
-        };
-        formData.append('metadata', JSON.stringify(metadata));
-        
-        // Simulasi progress untuk UX yang lebih baik
-        const interval = setInterval(() => {
-          const increment = Math.random() * 10;
-          setUploadProgress(prev => {
-            const newProgress = Math.min(prev + increment, 90);
-            options?.onProgress?.(newProgress);
-            return newProgress;
-          });
+        // Simulasikan progress untuk UX
+        let progress = 0;
+        const progressInterval = setInterval(() => {
+          progress += 5;
+          if (progress <= 90) {
+            setUploadProgress(progress);
+            options?.onProgress?.(progress);
+          }
         }, 300);
         
+        console.log("Sending file to API route");
         // Upload melalui API route
         const response = await fetch('/api/upload', {
           method: 'POST',
           body: formData
         });
         
-        clearInterval(interval);
+        clearInterval(progressInterval);
+        
+        console.log("API response status:", response.status);
         
         if (!response.ok) {
           const errorData = await response.json();
-          throw new Error(errorData.error || 'Upload failed');
+          console.error("Upload error response:", errorData);
+          throw new Error(errorData.message || errorData.error || 'Upload failed');
         }
         
-        // Set final progress
         setUploadProgress(100);
         options?.onProgress?.(100);
         
         const result = await response.json();
+        console.log("Upload successful, result:", result);
         
         toast({
           title: "Upload Berhasil",
