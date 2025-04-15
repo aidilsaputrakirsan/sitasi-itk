@@ -333,17 +333,18 @@ export function usePeriodeSempros() {
     queryKey: ['periode-sempros'],
     queryFn: async () => {
       try {
-        // Gunakan tabel periodes yang sudah ada
+        // Ganti ordering ke kolom yang benar
         const { data, error } = await supabase
           .from('periodes')
           .select('*')
-          .order('tanggal_mulai', { ascending: false });
+          .order('mulai_daftar', { ascending: false }); // Gunakan mulai_daftar bukan tanggal_mulai
         
         if (error) {
           console.error("Error fetching periode sempros:", error);
           throw error;
         }
         
+        // Mapping yang benar dari kolom database ke field aplikasi
         return data.map(periode => ({
           id: periode.id,
           nama_periode: periode.nama_periode,
@@ -376,11 +377,12 @@ export function useActivePeriodeSempros() {
           throw error;
         }
         
+        // Mapping yang benar dari kolom database ke field aplikasi
         return data.map(periode => ({
           id: periode.id,
           nama_periode: periode.nama_periode,
-          tanggal_mulai: periode.mulai_daftar || periode.created_at,
-          tanggal_selesai: periode.selesai_daftar || periode.updated_at,
+          tanggal_mulai: periode.mulai_daftar || periode.created_at,  // ini yang benar
+          tanggal_selesai: periode.selesai_daftar || periode.updated_at, // ini yang benar
           is_active: periode.is_active
         }));
       } catch (error) {
