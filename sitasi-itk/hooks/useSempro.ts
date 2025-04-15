@@ -20,7 +20,7 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { UserRole } from '@/types/auth';
 import { useToast } from './use-toast';
-import { useFileUpload } from './useFileUpload';
+import { useFirebaseStorage } from '@/hooks/useFirebaseStorage';
 
 // Google Drive folder ID untuk menyimpan dokumen sempro
 const SEMPRO_FOLDER_ID = process.env.NEXT_PUBLIC_SEMPRO_FOLDER_ID || '1y-4qBRLQnkLezBcYYf_N6kMxqaUXa6Lx';
@@ -556,7 +556,7 @@ export function useCreateSempro() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { user } = useAuth();
-  const { uploadFile } = useFileUpload();
+  const { uploadFile } = useFirebaseStorage();
   
   return useMutation({
     mutationFn: async (formValues: SemproFormValues) => {

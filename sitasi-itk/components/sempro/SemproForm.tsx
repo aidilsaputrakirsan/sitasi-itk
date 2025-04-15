@@ -14,10 +14,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, Option } from "@/components/ui/select";
 import { useStudentPengajuanTAforSempro } from '@/hooks/useSempro';
 import { FileUpload } from './FileUpload';
-import { useFileUpload } from '@/hooks/useFileUpload';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { AlertCircle } from 'lucide-react';
+import { useFirebaseStorage } from '@/hooks/useFirebaseStorage';
 
 // Adjusted schema validation to allow nullable/optional file fields
 const formSchema = z.object({
@@ -39,7 +39,7 @@ export function SemproForm({
 }: SemproFormProps) {
   // Fetch student's thesis proposals for the dropdown
   const { data: pengajuanList, isLoading: isLoadingPengajuan } = useStudentPengajuanTAforSempro();
-  const { uploadFile, isUploading } = useFileUpload();
+  const { uploadFile, isUploading } = useFirebaseStorage();
   const { user } = useAuth();
   
   // State for mahasiswa data
@@ -112,15 +112,14 @@ export function SemproForm({
     
     if (!file) return;
     
-    console.log("Uploading TA-012:", file.name, file.size, file.type); // Debug log
+    console.log("Uploading TA-012:", file.name, file.size, file.type);
     
-    // Track progress
     const handleProgress = (progress: number) => {
       setUploadProgress(prev => ({ ...prev, ta012: progress }));
     };
     
     try {
-      // Upload immediately to Google Drive
+      // Upload ke Firebase Storage
       const fileMetadata = await uploadFile(file, {
         studentId: mahasiswaData?.nim || '',
         studentName: mahasiswaData?.nama || '',
@@ -132,7 +131,6 @@ export function SemproForm({
         throw new Error('Gagal mengupload Form TA-012');
       }
       
-      // Perubahan penting: Debug log dan tambahkan metadata ke formValues
       console.log("TA-012 Upload Success:", fileMetadata);
       setValue('dokumen_ta012_metadata', fileMetadata);
     } catch (error) {
