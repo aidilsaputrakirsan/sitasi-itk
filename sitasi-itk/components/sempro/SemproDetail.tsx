@@ -1,10 +1,10 @@
-// components/sempro/SemproDetail.tsx
+// components/sempro/SemproDetail.tsx - Perbaikan tampilan dokumen
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { format } from 'date-fns';
-import { Sempro, StatusSempro } from '@/types/sempro';
+import { Sempro, StatusSempro, FileMetadata } from '@/types/sempro';
 import { UserRole } from '@/types/auth';
 import { Button } from "@/components/ui/button";
 import { SemproStatusBadge } from './SemproStatusBadge';
@@ -31,6 +31,41 @@ const formatTime = (timeString: string | undefined) => {
   return timeString.substring(0, 5); // Format: HH:mm
 };
 
+// Helper untuk membuat FileMetadata dari URL string
+const createFileMetadata = (url: string | null | undefined, type: string): FileMetadata | null => {
+  if (!url) return null;
+  
+  try {
+    // Ekstrak nama file dari URL (ambil bagian terakhir dari path)
+    const pathParts = url.split('/');
+    const fullFileName = pathParts[pathParts.length - 1];
+    
+    // Coba ekstrak nama file dari format timestamped
+    let fileName = fullFileName;
+    const timestampMatch = fullFileName.match(/\d+_(.+)/);
+    if (timestampMatch && timestampMatch[1]) {
+      fileName = timestampMatch[1];
+    }
+    
+    return {
+      fileId: url,
+      fileUrl: url,
+      fileName: fileName || `Dokumen ${type}`,
+      fileType: fileName.split('.').pop()?.toLowerCase() || 'pdf',
+      uploadedAt: new Date().toISOString()
+    };
+  } catch (e) {
+    console.error("Error creating file metadata from URL:", e);
+    return {
+      fileId: url,
+      fileUrl: url,
+      fileName: `Dokumen ${type}`,
+      fileType: 'unknown',
+      uploadedAt: new Date().toISOString()
+    };
+  }
+};
+
 interface SemproDetailProps {
   sempro: Sempro;
   userRole: UserRole;
@@ -48,6 +83,21 @@ export function SemproDetail({
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [newStatus, setNewStatus] = useState<StatusSempro>('verified');
   const [statusNote, setStatusNote] = useState('');
+  
+  // Membuat objek FileMetadata dari URL
+  const dokumenTA012 = typeof sempro.dokumen_ta012 === 'object' ? sempro.dokumen_ta012 : 
+    createFileMetadata(sempro.dokumen_ta012 as unknown as string, 'TA-012');
+  const dokumenPlagiarisme = typeof sempro.dokumen_plagiarisme === 'object' ? sempro.dokumen_plagiarisme :
+    createFileMetadata(sempro.dokumen_plagiarisme as unknown as string, 'Plagiarisme');
+  const dokumenDraft = typeof sempro.dokumen_draft === 'object' ? sempro.dokumen_draft :
+    createFileMetadata(sempro.dokumen_draft as unknown as string, 'Proposal');
+
+  // Logging untuk debugging
+  useEffect(() => {
+    console.log("dokumenTA012:", dokumenTA012);
+    console.log("dokumenPlagiarisme:", dokumenPlagiarisme);
+    console.log("dokumenDraft:", dokumenDraft);
+  }, [dokumenTA012, dokumenPlagiarisme, dokumenDraft]);
   
   // Handle status update
   const handleStatusUpdate = () => {
@@ -80,7 +130,7 @@ export function SemproDetail({
               <h3 className="text-lg font-semibold">{sempro.pengajuan_ta?.judul || 'Judul Tidak Tersedia'}</h3>
               <div className="flex items-center mt-2">
                 <span className="text-sm text-gray-500">
-                  Terdaftar pada {formatDate(sempro.tanggal_daftar)}
+                  Terdaftar pada {formatDate(sempro.created_at)}
                 </span>
               </div>
             </div>
@@ -118,17 +168,19 @@ export function SemproDetail({
                         <FileText className="h-4 w-4 mr-2 text-blue-600" />
                         <h5 className="text-sm font-medium">Form TA-012</h5>
                       </div>
-                      <a 
-                        href={sempro.dokumen_ta012?.fileUrl} 
-                        target="_blank" 
-                        rel="noopener noreferrer" 
-                        className="text-blue-600 hover:text-blue-800"
-                      >
-                        <Download className="h-4 w-4" />
-                      </a>
+                      {dokumenTA012 && (
+                        <a 
+                          href={dokumenTA012.fileUrl} 
+                          target="_blank" 
+                          rel="noopener noreferrer" 
+                          className="text-blue-600 hover:text-blue-800"
+                        >
+                          <Download className="h-4 w-4" />
+                        </a>
+                      )}
                     </div>
                     <p className="text-xs text-gray-500 truncate">
-                      {sempro.dokumen_ta012?.fileName || 'Tidak tersedia'}
+                      {dokumenTA012?.fileName || 'Tidak tersedia'}
                     </p>
                   </CardContent>
                 </Card>
@@ -141,17 +193,19 @@ export function SemproDetail({
                         <FileText className="h-4 w-4 mr-2 text-blue-600" />
                         <h5 className="text-sm font-medium">Hasil Cek Plagiarisme</h5>
                       </div>
-                      <a 
-                        href={sempro.dokumen_plagiarisme?.fileUrl} 
-                        target="_blank" 
-                        rel="noopener noreferrer" 
-                        className="text-blue-600 hover:text-blue-800"
-                      >
-                        <Download className="h-4 w-4" />
-                      </a>
+                      {dokumenPlagiarisme && (
+                        <a 
+                          href={dokumenPlagiarisme.fileUrl} 
+                          target="_blank" 
+                          rel="noopener noreferrer" 
+                          className="text-blue-600 hover:text-blue-800"
+                        >
+                          <Download className="h-4 w-4" />
+                        </a>
+                      )}
                     </div>
                     <p className="text-xs text-gray-500 truncate">
-                      {sempro.dokumen_plagiarisme?.fileName || 'Tidak tersedia'}
+                      {dokumenPlagiarisme?.fileName || 'Tidak tersedia'}
                     </p>
                   </CardContent>
                 </Card>
@@ -164,17 +218,19 @@ export function SemproDetail({
                         <FileText className="h-4 w-4 mr-2 text-blue-600" />
                         <h5 className="text-sm font-medium">Draft Proposal</h5>
                       </div>
-                      <a 
-                        href={sempro.dokumen_draft?.fileUrl} 
-                        target="_blank" 
-                        rel="noopener noreferrer" 
-                        className="text-blue-600 hover:text-blue-800"
-                      >
-                        <Download className="h-4 w-4" />
-                      </a>
+                      {dokumenDraft && (
+                        <a 
+                          href={dokumenDraft.fileUrl} 
+                          target="_blank" 
+                          rel="noopener noreferrer" 
+                          className="text-blue-600 hover:text-blue-800"
+                        >
+                          <Download className="h-4 w-4" />
+                        </a>
+                      )}
                     </div>
                     <p className="text-xs text-gray-500 truncate">
-                      {sempro.dokumen_draft?.fileName || 'Tidak tersedia'}
+                      {dokumenDraft?.fileName || 'Tidak tersedia'}
                     </p>
                   </CardContent>
                 </Card>

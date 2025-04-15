@@ -1,7 +1,7 @@
-// hooks/useFirebaseStorage.ts - Perbaikan
+// hooks/useFirebaseStorage.ts - Perbaikan duplikasi dan tracking status file
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { FileMetadata } from '@/types/sempro';
 import { useToast } from './use-toast';
 import { useAuth } from '@/contexts/AuthContext';
@@ -20,6 +20,9 @@ export function useFirebaseStorage() {
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const { toast } = useToast();
   const { user } = useAuth();
+  
+  // Gunakan useRef untuk melacak upload yang sedang berjalan dan mencegah duplikasi
+  const ongoingUploadsRef = useRef<Map<string, boolean>>(new Map());
 
   const uploadFile = useCallback(
     async (file: File, options?: UploadOptions): Promise<FileMetadata | null> => {
@@ -31,6 +34,26 @@ export function useFirebaseStorage() {
         });
         return null;
       }
+
+      // Buat fileId unik berdasarkan nama file dan ukuran untuk mencegah upload ulang file yang sama
+      const fileId = `${file.name}-${file.size}`;
+      
+      // Cek apakah file ini sedang dalam proses upload
+      if (ongoingUploadsRef.current.get(fileId)) {
+        console.log(`Upload untuk ${file.name} sedang berlangsung, tidak akan mengupload ulang`);
+        toast({
+          variant: "destructive",
+          title: "Upload Sedang Berlangsung",
+          description: `File ${file.name} sedang diupload, harap tunggu`,
+        });
+        return null;
+      }
+      
+      // Tandai bahwa file ini sedang diupload
+      ongoingUploadsRef.current.set(fileId, true);
+      
+      // Logging tambahan untuk debugging
+      console.log(`==== Memulai upload untuk ${file.name} (${fileId}) ====`);
 
       setIsUploading(true);
       setUploadProgress(0);
@@ -62,7 +85,7 @@ export function useFirebaseStorage() {
           }
         }, 300);
         
-        console.log("Sending file to API route");
+        console.log("Sending file to API route:", path);
         // Upload melalui API route
         const response = await fetch('/api/upload', {
           method: 'POST',
@@ -90,7 +113,16 @@ export function useFirebaseStorage() {
           description: `File ${file.name} berhasil diupload`,
         });
         
-        return result;
+        // Buat metadata yang lengkap dengan filename
+        const metadata: FileMetadata = {
+          fileId: result.fileId,
+          fileUrl: result.fileUrl,
+          fileName: file.name,
+          fileType: file.type,
+          uploadedAt: result.uploadedAt || new Date().toISOString()
+        };
+        
+        return metadata;
       } catch (error) {
         console.error('Error uploading file:', error);
         toast({
@@ -100,7 +132,10 @@ export function useFirebaseStorage() {
         });
         return null;
       } finally {
+        // Hapus tanda bahwa file ini sedang diupload
+        ongoingUploadsRef.current.delete(fileId);
         setIsUploading(false);
+        console.log(`==== Upload untuk ${file.name} selesai ====`);
       }
     },
     [toast, user]

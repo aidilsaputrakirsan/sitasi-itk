@@ -551,12 +551,13 @@ export function useStudentPengajuanTAforSempro() {
   });
 }
 
+// Perbaikan fungsi useCreateSempro di hooks/useSempro.ts untuk menggunakan properti metadata
+
 // Create a new sempro registration
 export function useCreateSempro() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { user } = useAuth();
-  const { uploadFile } = useFirebaseStorage();
   
   return useMutation({
     mutationFn: async (formValues: SemproFormValues) => {
@@ -572,14 +573,16 @@ export function useCreateSempro() {
           throw new Error('Pengajuan TA harus dipilih');
         }
         
-        // Check if files are provided
-        if (!formValues.dokumen_ta012 || !formValues.dokumen_plagiarisme || !formValues.dokumen_draft) {
-          throw new Error('Semua dokumen harus diupload');
+        // Check if metadata is provided - penting untuk mencegah upload duplikat
+        if (!formValues.dokumen_ta012_metadata || 
+            !formValues.dokumen_plagiarisme_metadata || 
+            !formValues.dokumen_draft_metadata) {
+          throw new Error('Metadata file tidak lengkap');
         }
         
         // Check if user has registered in an active period
         const { data: periodeData, error: periodeError } = await supabase
-          .from('periodes')  // Gunakan tabel periodes yang ada
+          .from('periodes')
           .select('id')
           .eq('is_active', true)
           .order('created_at', { ascending: false })
@@ -590,49 +593,26 @@ export function useCreateSempro() {
           throw new Error('Tidak ada periode pendaftaran sempro yang aktif saat ini');
         }
         
-        // Upload files ke Google Drive
-        let form_ta_012_url = "";
-        let bukti_plagiasi_url = "";
-        let proposal_ta_url = "";
+        // Tidak perlu upload file lagi karena sudah menggunakan metadata yang ada
+        console.log("Menggunakan metadata file yang sudah diupload sebelumnya");
         
-        try {
-          // Upload file TA-012
-          const ta012Metadata = await uploadFile(formValues.dokumen_ta012, { 
-            description: 'Form TA-012 untuk pendaftaran seminar proposal' 
-          });
-          if (ta012Metadata) form_ta_012_url = ta012Metadata.fileUrl;
-          
-          // Upload file bukti plagiasi
-          const plagiarismMetadata = await uploadFile(formValues.dokumen_plagiarisme, { 
-            description: 'Hasil cek plagiarisme untuk pendaftaran seminar proposal' 
-          });
-          if (plagiarismMetadata) bukti_plagiasi_url = plagiarismMetadata.fileUrl;
-          
-          // Upload file draft proposal
-          const draftMetadata = await uploadFile(formValues.dokumen_draft, { 
-            description: 'Draft proposal untuk pendaftaran seminar proposal' 
-          });
-          if (draftMetadata) proposal_ta_url = draftMetadata.fileUrl;
-        } catch (error) {
-          console.error('Error uploading files:', error);
-          throw new Error('Gagal mengupload dokumen: ' + (error instanceof Error ? error.message : String(error)));
-        }
-        
-        // Create the sempro record
+        // Create the sempro record with file metadata
         const { data, error } = await supabase
           .from('sempros')
           .insert([
             {
               user_id: user.id,
               pengajuan_ta_id: formValues.pengajuan_ta_id,
-              periode_id: periodeData.id,      // Gunakan periode_id dari active periode
-              tanggal: new Date().toISOString(), // Gunakan kolom tanggal yang ada
-              form_ta_012: form_ta_012_url,    // Sesuaikan dengan nama kolom di tabel
-              bukti_plagiasi: bukti_plagiasi_url, // Sesuaikan dengan nama kolom di tabel
-              proposal_ta: proposal_ta_url,    // Sesuaikan dengan nama kolom di tabel 
-              status: 'registered',            // Status awal
-              approve_pembimbing_1: false,     // Default false
-              approve_pembimbing_2: false      // Default false
+              periode_id: periodeData.id,
+              tanggal_daftar: new Date().toISOString(),
+              // Simpan metadata file
+              dokumen_ta012: formValues.dokumen_ta012_metadata,
+              dokumen_plagiarisme: formValues.dokumen_plagiarisme_metadata,
+              dokumen_draft: formValues.dokumen_draft_metadata,
+              status: 'registered',
+              approve_pembimbing_1: false,
+              approve_pembimbing_2: false,
+              catatan: formValues.catatan || null
             }
           ])
           .select();

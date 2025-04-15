@@ -1,10 +1,11 @@
-// components/sempro/FileUpload.tsx - perbaikan
+// components/sempro/FileUpload.tsx - perbaikan untuk mendukung metadata dan mencegah double upload
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { UploadCloud, X, CheckCircle, File, Trash } from 'lucide-react';
+import { UploadCloud, X, CheckCircle, File, Trash, FileCheck } from 'lucide-react';
+import { FileMetadata } from '@/types/sempro';
 
 interface FileUploadProps {
   id: string;
@@ -13,15 +14,17 @@ interface FileUploadProps {
   onFileSelected: (file: File | null) => void; // Changed to accept null
   progress?: number;
   currentFile: File | null;
+  metadata?: FileMetadata | null; // Tambahan untuk mendukung file yang sudah terupload
 }
 
 export function FileUpload({
   id,
   acceptedFileTypes = '.pdf,.doc,.docx',
-  maxSize = 5, // default 5MB
+  maxSize = 10, // default dinaikkan ke 10MB
   onFileSelected,
   progress = 0,
-  currentFile
+  currentFile,
+  metadata
 }: FileUploadProps) {
   const [dragActive, setDragActive] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -117,16 +120,25 @@ export function FileUpload({
     onFileSelected(null);
   };
   
+  // Jika metadata tersedia, tandai file sebagai sudah terupload berhasil
+  const isFileUploaded = !!metadata && !!metadata.fileUrl;
+  
   return (
     <div className="w-full">
-      {currentFile ? (
+      {currentFile || isFileUploaded ? (
         <div className="border rounded-md p-3 bg-gray-50">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
               <File className="h-5 w-5 text-gray-500" />
               <div>
-                <p className="text-sm font-medium truncate max-w-[200px]">{currentFile.name}</p>
-                <p className="text-xs text-gray-500">{formatFileSize(currentFile.size)}</p>
+                <p className="text-sm font-medium truncate max-w-[200px]">
+                  {metadata?.fileName || currentFile?.name || "File terupload"}
+                </p>
+                <p className="text-xs text-gray-500">
+                  {currentFile ? formatFileSize(currentFile.size) : (
+                    isFileUploaded ? "File sudah terupload" : ""
+                  )}
+                </p>
               </div>
             </div>
             <Button 
@@ -140,7 +152,8 @@ export function FileUpload({
             </Button>
           </div>
           
-          {progress > 0 && progress < 100 && (
+          {/* Hanya tampilkan progress jika file belum selesai diupload */}
+          {!isFileUploaded && progress > 0 && progress < 100 && (
             <div className="mt-2">
               <div className="h-1.5 w-full bg-gray-200 rounded-full overflow-hidden">
                 <div 
@@ -152,9 +165,10 @@ export function FileUpload({
             </div>
           )}
           
-          {progress === 100 && (
+          {/* Tampilkan indikator sukses jika upload selesai */}
+          {(isFileUploaded || progress === 100) && (
             <div className="flex items-center justify-end mt-2 text-green-600 text-xs">
-              <CheckCircle className="h-3 w-3 mr-1" />
+              <FileCheck className="h-3 w-3 mr-1" />
               <span>Upload selesai</span>
             </div>
           )}

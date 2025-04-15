@@ -151,14 +151,6 @@ export interface RiwayatPendaftaranSempro {
   };
 }
 
-export interface SemproFormValues {
-  pengajuan_ta_id: string;
-  catatan?: string;
-  dokumen_ta012?: File | null;
-  dokumen_plagiarisme?: File | null;
-  dokumen_draft?: File | null;
-}
-
 export interface JadwalSemproFormValues {
   periode_id: string;
   pengajuan_ta_id: string;

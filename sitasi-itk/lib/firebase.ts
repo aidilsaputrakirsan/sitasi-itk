@@ -13,7 +13,7 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID
 };
 
-// Initialize Firebase
+// Initialize Firebase with consistent pattern
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 const storage = getStorage(app);
 
@@ -46,8 +46,12 @@ export const uploadFileToStorage = async (
         }
       },
       (error) => {
-        // Handle errors
-        console.error('Upload error:', error);
+        // Handle errors with better error details
+        console.error('Upload error:', {
+          code: error.code,
+          message: error.message,
+          serverResponse: error.customData?.serverResponse || 'No server response'
+        });
         reject(error);
       },
       async () => {

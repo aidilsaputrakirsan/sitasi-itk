@@ -1,11 +1,11 @@
-// components/sempro/SemproForm.tsx
+// components/sempro/SemproForm.tsx - Perbaikan untuk menggunakan properti metadata terpisah
 'use client';
 
 import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { SemproFormValues } from '@/types/sempro';
+import { SemproFormValues, FileMetadata } from '@/types/sempro';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -19,13 +19,18 @@ import { supabase } from '@/lib/supabase';
 import { AlertCircle } from 'lucide-react';
 import { useFirebaseStorage } from '@/hooks/useFirebaseStorage';
 
-// Adjusted schema validation to allow nullable/optional file fields
+// Adjusted schema validation untuk file dan metadata
 const formSchema = z.object({
   pengajuan_ta_id: z.string().min(1, 'Tugas akhir harus dipilih'),
   catatan: z.string().optional(),
-  dokumen_ta012: z.any().optional(),  // Changed from z.instanceof(File)
+  // File object untuk UI
+  dokumen_ta012: z.any().optional(),
   dokumen_plagiarisme: z.any().optional(),
-  dokumen_draft: z.any().optional()
+  dokumen_draft: z.any().optional(),
+  // Metadata untuk pengiriman ke server
+  dokumen_ta012_metadata: z.any().optional(),
+  dokumen_plagiarisme_metadata: z.any().optional(),
+  dokumen_draft_metadata: z.any().optional()
 });
 
 interface SemproFormProps {
@@ -45,10 +50,15 @@ export function SemproForm({
   // State for mahasiswa data
   const [mahasiswaData, setMahasiswaData] = useState<{nim?: string, nama?: string} | null>(null);
   
-  // State for file uploads
+  // State for file uploads - menyimpan File object
   const [dokumenTA012, setDokumenTA012] = useState<File | null>(null);
   const [dokumenPlagiarisme, setDokumenPlagiarisme] = useState<File | null>(null);
   const [dokumenDraft, setDokumenDraft] = useState<File | null>(null);
+  
+  // State untuk metadata file yang sudah diupload - penting untuk mencegah duplikasi
+  const [dokumenTA012Metadata, setDokumenTA012Metadata] = useState<FileMetadata | null>(null);
+  const [dokumenPlagiarismeMetadata, setDokumenPlagiarismeMetadata] = useState<FileMetadata | null>(null);
+  const [dokumenDraftMetadata, setDokumenDraftMetadata] = useState<FileMetadata | null>(null);
   
   // Upload progress tracking
   const [uploadProgress, setUploadProgress] = useState({
@@ -101,16 +111,24 @@ export function SemproForm({
       catatan: '',
       dokumen_ta012: undefined,
       dokumen_plagiarisme: undefined,
-      dokumen_draft: undefined
+      dokumen_draft: undefined,
+      dokumen_ta012_metadata: undefined,
+      dokumen_plagiarisme_metadata: undefined,
+      dokumen_draft_metadata: undefined
     }
   });
 
-  // Handle file uploads with Google Drive integration
+  // Handle file uploads dengan penyimpanan terpisah untuk File dan Metadata
   const handleTA012Upload = async (file: File | null) => {
     setDokumenTA012(file);
-    setValue('dokumen_ta012', file || undefined);
     
-    if (!file) return;
+    // Reset metadata jika file dihapus
+    if (!file) {
+      setDokumenTA012Metadata(null);
+      setValue('dokumen_ta012', null);
+      setValue('dokumen_ta012_metadata', undefined);
+      return;
+    }
     
     console.log("Uploading TA-012:", file.name, file.size, file.type);
     
@@ -132,6 +150,14 @@ export function SemproForm({
       }
       
       console.log("TA-012 Upload Success:", fileMetadata);
+      
+      // Simpan metadata untuk tampilan dan submit
+      setDokumenTA012Metadata(fileMetadata);
+      
+      // Set form value: File untuk UI
+      setValue('dokumen_ta012', file);
+      
+      // Set metadata di properti terpisah untuk submit
       setValue('dokumen_ta012_metadata', fileMetadata);
     } catch (error) {
       console.error('Error uploading TA-012:', error);
@@ -141,9 +167,14 @@ export function SemproForm({
   
   const handlePlagiarismeUpload = async (file: File | null) => {
     setDokumenPlagiarisme(file);
-    setValue('dokumen_plagiarisme', file || undefined);
     
-    if (!file) return;
+    // Reset metadata jika file dihapus
+    if (!file) {
+      setDokumenPlagiarismeMetadata(null);
+      setValue('dokumen_plagiarisme', null);
+      setValue('dokumen_plagiarisme_metadata', undefined);
+      return;
+    }
     
     // Track progress
     const handleProgress = (progress: number) => {
@@ -151,10 +182,10 @@ export function SemproForm({
     };
     
     try {
-      // Upload immediately to Google Drive
+      // Upload ke Firebase Storage
       const fileMetadata = await uploadFile(file, {
-        studentId: mahasiswaData?.nim,
-        studentName: mahasiswaData?.nama,
+        studentId: mahasiswaData?.nim || '',
+        studentName: mahasiswaData?.nama || '',
         description: 'Hasil cek plagiarisme untuk pendaftaran seminar proposal',
         onProgress: handleProgress
       });
@@ -162,6 +193,15 @@ export function SemproForm({
       if (!fileMetadata) {
         throw new Error('Gagal mengupload hasil cek plagiarisme');
       }
+      
+      // Simpan metadata untuk tampilan dan submit
+      setDokumenPlagiarismeMetadata(fileMetadata);
+      
+      // Set form value: File untuk UI
+      setValue('dokumen_plagiarisme', file);
+      
+      // Set metadata di properti terpisah untuk submit
+      setValue('dokumen_plagiarisme_metadata', fileMetadata);
     } catch (error) {
       console.error('Error uploading plagiarisme document:', error);
       setUploadError('Gagal mengupload hasil cek plagiarisme. Silakan coba lagi.');
@@ -170,9 +210,14 @@ export function SemproForm({
   
   const handleDraftUpload = async (file: File | null) => {
     setDokumenDraft(file);
-    setValue('dokumen_draft', file || undefined);
     
-    if (!file) return;
+    // Reset metadata jika file dihapus
+    if (!file) {
+      setDokumenDraftMetadata(null);
+      setValue('dokumen_draft', null);
+      setValue('dokumen_draft_metadata', undefined);
+      return;
+    }
     
     // Track progress
     const handleProgress = (progress: number) => {
@@ -180,10 +225,10 @@ export function SemproForm({
     };
     
     try {
-      // Upload immediately to Google Drive
+      // Upload ke Firebase Storage
       const fileMetadata = await uploadFile(file, {
-        studentId: mahasiswaData?.nim,
-        studentName: mahasiswaData?.nama,
+        studentId: mahasiswaData?.nim || '',
+        studentName: mahasiswaData?.nama || '',
         description: 'Draft proposal untuk pendaftaran seminar proposal',
         onProgress: handleProgress
       });
@@ -191,6 +236,15 @@ export function SemproForm({
       if (!fileMetadata) {
         throw new Error('Gagal mengupload draft proposal');
       }
+      
+      // Simpan metadata untuk tampilan dan submit
+      setDokumenDraftMetadata(fileMetadata);
+      
+      // Set form value: File untuk UI
+      setValue('dokumen_draft', file);
+      
+      // Set metadata di properti terpisah untuk submit
+      setValue('dokumen_draft_metadata', fileMetadata);
     } catch (error) {
       console.error('Error uploading draft document:', error);
       setUploadError('Gagal mengupload draft proposal. Silakan coba lagi.');
@@ -203,8 +257,8 @@ export function SemproForm({
       return;
     }
     
-    // Required file validation
-    if (!dokumenTA012 || !dokumenPlagiarisme || !dokumenDraft) {
+    // Required file validation - periksa metadata, bukan file
+    if (!dokumenTA012Metadata || !dokumenPlagiarismeMetadata || !dokumenDraftMetadata) {
       setUploadError('Semua dokumen harus diupload');
       return;
     }
@@ -212,12 +266,13 @@ export function SemproForm({
     // Reset upload error
     setUploadError(null);
     
-    // Set file objects to the form data
-    data.dokumen_ta012 = dokumenTA012;
-    data.dokumen_plagiarisme = dokumenPlagiarisme;
-    data.dokumen_draft = dokumenDraft;
+    // Pastikan metadata digunakan untuk pengiriman data
+    // TypeScript tidak akan error karena kita menggunakan properti metadata yang sudah terdefinisi
+    data.dokumen_ta012_metadata = dokumenTA012Metadata;
+    data.dokumen_plagiarisme_metadata = dokumenPlagiarismeMetadata;
+    data.dokumen_draft_metadata = dokumenDraftMetadata;
     
-    console.log("Submitting form data:", data);
+    console.log("Submitting form data dengan metadata file:", data);
     onSubmit(data);
   };
 
@@ -286,10 +341,11 @@ export function SemproForm({
               <FileUpload
                 id="dokumen_ta012"
                 acceptedFileTypes=".pdf,.doc,.docx"
-                maxSize={5} // 5MB
+                maxSize={10} // 10MB
                 onFileSelected={handleTA012Upload}
                 progress={uploadProgress.ta012}
                 currentFile={dokumenTA012}
+                metadata={dokumenTA012Metadata}
               />
               {errors.dokumen_ta012 && (
                 <p className="text-red-500 text-xs mt-1">{errors.dokumen_ta012.message}</p>
@@ -302,10 +358,11 @@ export function SemproForm({
               <FileUpload
                 id="dokumen_plagiarisme"
                 acceptedFileTypes=".pdf,.doc,.docx"
-                maxSize={5}
+                maxSize={10} // 10MB
                 onFileSelected={handlePlagiarismeUpload}
                 progress={uploadProgress.plagiarisme}
                 currentFile={dokumenPlagiarisme}
+                metadata={dokumenPlagiarismeMetadata}
               />
               {errors.dokumen_plagiarisme && (
                 <p className="text-red-500 text-xs mt-1">{errors.dokumen_plagiarisme.message}</p>
@@ -318,10 +375,11 @@ export function SemproForm({
               <FileUpload
                 id="dokumen_draft"
                 acceptedFileTypes=".pdf,.doc,.docx"
-                maxSize={10} // 10MB for larger documents
+                maxSize={10} // 10MB
                 onFileSelected={handleDraftUpload}
                 progress={uploadProgress.draft}
                 currentFile={dokumenDraft}
+                metadata={dokumenDraftMetadata}
               />
               {errors.dokumen_draft && (
                 <p className="text-red-500 text-xs mt-1">{errors.dokumen_draft.message}</p>
@@ -347,11 +405,11 @@ export function SemproForm({
           <Button 
             type="submit" 
             disabled={isSubmitting || isUploading || 
-              (!!dokumenTA012 && uploadProgress.ta012 < 100) || 
-              (!!dokumenPlagiarisme && uploadProgress.plagiarisme < 100) || 
-              (!!dokumenDraft && uploadProgress.draft < 100)}
+              (!dokumenTA012Metadata && !!dokumenTA012 && uploadProgress.ta012 < 100) || 
+              (!dokumenPlagiarismeMetadata && !!dokumenPlagiarisme && uploadProgress.plagiarisme < 100) || 
+              (!dokumenDraftMetadata && !!dokumenDraft && uploadProgress.draft < 100)}
           >
-            {isSubmitting ? 'Mendaftar...' : isUploading ? 'Mengunggah...' : 'Daftar Seminar Proposal'}
+            {isSubmitting ? 'Mendaftar...' : 'Daftar Seminar Proposal'}
           </Button>
         </CardFooter>
       </form>
