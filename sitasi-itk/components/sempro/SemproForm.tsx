@@ -1,7 +1,7 @@
 // components/sempro/SemproForm.tsx
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -14,6 +14,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, Option } from "@/components/ui/select";
 import { useStudentPengajuanTAforSempro } from '@/hooks/useSempro';
 import { FileUpload } from './FileUpload';
+import { useFileUpload } from '@/hooks/useFileUpload';
+import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/lib/supabase';
+import { AlertCircle } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 // Schema validation for the form using Zod
 const formSchema = z.object({
@@ -35,6 +40,11 @@ export function SemproForm({
 }: SemproFormProps) {
   // Fetch student's thesis proposals for the dropdown
   const { data: pengajuanList, isLoading: isLoadingPengajuan } = useStudentPengajuanTAforSempro();
+  const { uploadFile, isUploading } = useFileUpload();
+  const { user } = useAuth();
+  
+  // State for mahasiswa data
+  const [mahasiswaData, setMahasiswaData] = useState<{nim?: string, nama?: string} | null>(null);
   
   // State for file uploads
   const [dokumenTA012, setDokumenTA012] = useState<File | null>(null);
@@ -47,6 +57,37 @@ export function SemproForm({
     plagiarisme: 0,
     draft: 0
   });
+
+  // Error state
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  
+  // Fetch mahasiswa data
+  useEffect(() => {
+    const fetchMahasiswaData = async () => {
+      if (!user) return;
+      
+      try {
+        const { data, error } = await supabase
+          .from('mahasiswas')
+          .select('nama, nim')
+          .eq('user_id', user.id)
+          .single();
+          
+        if (error) {
+          console.error('Error fetching mahasiswa data:', error);
+          return;
+        }
+        
+        if (data) {
+          setMahasiswaData(data);
+        }
+      } catch (error) {
+        console.error('Unexpected error fetching mahasiswa data:', error);
+      }
+    };
+    
+    fetchMahasiswaData();
+  }, [user]);
   
   const {
     register,
@@ -62,23 +103,97 @@ export function SemproForm({
     }
   });
 
-  // Handle file uploads
-  const handleTA012Upload = (file: File) => {
+  // Handle file uploads with Google Drive integration
+  const handleTA012Upload = async (file: File) => {
     setDokumenTA012(file);
     setValue('dokumen_ta012', file);
+    
+    // Track progress
+    const handleProgress = (progress: number) => {
+      setUploadProgress(prev => ({ ...prev, ta012: progress }));
+    };
+    
+    try {
+      // Upload immediately to Google Drive
+      const fileMetadata = await uploadFile(file, {
+        studentId: mahasiswaData?.nim,
+        studentName: mahasiswaData?.nama,
+        description: 'Form TA-012 untuk pendaftaran seminar proposal',
+        onProgress: handleProgress
+      });
+      
+      if (!fileMetadata) {
+        throw new Error('Gagal mengupload Form TA-012');
+      }
+    } catch (error) {
+      console.error('Error uploading TA-012:', error);
+      setUploadError('Gagal mengupload File TA-012. Silakan coba lagi.');
+    }
   };
   
-  const handlePlagiarismeUpload = (file: File) => {
+  const handlePlagiarismeUpload = async (file: File) => {
     setDokumenPlagiarisme(file);
     setValue('dokumen_plagiarisme', file);
+    
+    // Track progress
+    const handleProgress = (progress: number) => {
+      setUploadProgress(prev => ({ ...prev, plagiarisme: progress }));
+    };
+    
+    try {
+      // Upload immediately to Google Drive
+      const fileMetadata = await uploadFile(file, {
+        studentId: mahasiswaData?.nim,
+        studentName: mahasiswaData?.nama,
+        description: 'Hasil cek plagiarisme untuk pendaftaran seminar proposal',
+        onProgress: handleProgress
+      });
+      
+      if (!fileMetadata) {
+        throw new Error('Gagal mengupload hasil cek plagiarisme');
+      }
+    } catch (error) {
+      console.error('Error uploading plagiarisme document:', error);
+      setUploadError('Gagal mengupload hasil cek plagiarisme. Silakan coba lagi.');
+    }
   };
   
-  const handleDraftUpload = (file: File) => {
+  const handleDraftUpload = async (file: File) => {
     setDokumenDraft(file);
     setValue('dokumen_draft', file);
+    
+    // Track progress
+    const handleProgress = (progress: number) => {
+      setUploadProgress(prev => ({ ...prev, draft: progress }));
+    };
+    
+    try {
+      // Upload immediately to Google Drive
+      const fileMetadata = await uploadFile(file, {
+        studentId: mahasiswaData?.nim,
+        studentName: mahasiswaData?.nama,
+        description: 'Draft proposal untuk pendaftaran seminar proposal',
+        onProgress: handleProgress
+      });
+      
+      if (!fileMetadata) {
+        throw new Error('Gagal mengupload draft proposal');
+      }
+    } catch (error) {
+      console.error('Error uploading draft document:', error);
+      setUploadError('Gagal mengupload draft proposal. Silakan coba lagi.');
+    }
   };
 
   const onFormSubmit = (data: SemproFormValues) => {
+    if (isUploading) {
+      setUploadError('Mohon tunggu hingga semua file selesai diupload');
+      return;
+    }
+    
+    // Reset upload error
+    setUploadError(null);
+    
     console.log("Submitting form data:", data);
     onSubmit(data);
   };
@@ -90,6 +205,24 @@ export function SemproForm({
       </CardHeader>
       <form onSubmit={handleSubmit(onFormSubmit)}>
         <CardContent className="space-y-6">
+          {/* Status mahasiswa info */}
+          {mahasiswaData && (
+            <div className="bg-blue-50 border border-blue-200 rounded-md p-4">
+              <p className="text-sm text-blue-700">
+                <span className="font-medium">Mahasiswa:</span> {mahasiswaData.nama} ({mahasiswaData.nim})
+              </p>
+            </div>
+          )}
+          
+          {/* Upload error alert */}
+          {uploadError && (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>Error</AlertTitle>
+              <AlertDescription>{uploadError}</AlertDescription>
+            </Alert>
+          )}
+          
           {/* Tugas Akhir Selection */}
           <div className="space-y-2">
             <Label htmlFor="pengajuan_ta_id">Tugas Akhir</Label>
@@ -187,8 +320,11 @@ export function SemproForm({
           <Button variant="outline" type="button" onClick={() => window.history.back()}>
             Batal
           </Button>
-          <Button type="submit" disabled={isSubmitting}>
-            {isSubmitting ? 'Mendaftar...' : 'Daftar Seminar Proposal'}
+          <Button 
+            type="submit" 
+            disabled={isSubmitting || isUploading || uploadProgress.ta012 < 100 || uploadProgress.plagiarisme < 100 || uploadProgress.draft < 100}
+          >
+            {isSubmitting ? 'Mendaftar...' : isUploading ? 'Mengunggah...' : 'Daftar Seminar Proposal'}
           </Button>
         </CardFooter>
       </form>
