@@ -142,9 +142,9 @@ export interface RiwayatPendaftaranSempro {
 export interface SemproFormValues {
   pengajuan_ta_id: string;
   catatan?: string;
-  dokumen_ta012?: File;
-  dokumen_plagiarisme?: File;
-  dokumen_draft?: File;
+  dokumen_ta012?: File | null;
+  dokumen_plagiarisme?: File | null;
+  dokumen_draft?: File | null;
 }
 
 export interface JadwalSemproFormValues {

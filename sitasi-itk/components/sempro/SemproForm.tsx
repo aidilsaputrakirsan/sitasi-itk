@@ -18,15 +18,14 @@ import { useFileUpload } from '@/hooks/useFileUpload';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { AlertCircle } from 'lucide-react';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
-// Schema validation for the form using Zod
+// Adjusted schema validation to allow nullable/optional file fields
 const formSchema = z.object({
   pengajuan_ta_id: z.string().min(1, 'Tugas akhir harus dipilih'),
   catatan: z.string().optional(),
-  dokumen_ta012: z.instanceof(File, { message: 'Form TA-012 harus diupload' }),
-  dokumen_plagiarisme: z.instanceof(File, { message: 'Hasil cek plagiarisme harus diupload' }),
-  dokumen_draft: z.instanceof(File, { message: 'Draft proposal harus diupload' })
+  dokumen_ta012: z.any().optional(),  // Changed from z.instanceof(File)
+  dokumen_plagiarisme: z.any().optional(),
+  dokumen_draft: z.any().optional()
 });
 
 interface SemproFormProps {
@@ -96,17 +95,22 @@ export function SemproForm({
     setValue,
     watch
   } = useForm<SemproFormValues>({
-    resolver: zodResolver(formSchema),
+    resolver: zodResolver(formSchema) as any, // Type cast to avoid TS errors
     defaultValues: {
       pengajuan_ta_id: '',
-      catatan: ''
+      catatan: '',
+      dokumen_ta012: undefined,
+      dokumen_plagiarisme: undefined,
+      dokumen_draft: undefined
     }
   });
 
   // Handle file uploads with Google Drive integration
-  const handleTA012Upload = async (file: File) => {
+  const handleTA012Upload = async (file: File | null) => {
     setDokumenTA012(file);
-    setValue('dokumen_ta012', file);
+    setValue('dokumen_ta012', file || undefined);
+    
+    if (!file) return;
     
     // Track progress
     const handleProgress = (progress: number) => {
@@ -131,9 +135,11 @@ export function SemproForm({
     }
   };
   
-  const handlePlagiarismeUpload = async (file: File) => {
+  const handlePlagiarismeUpload = async (file: File | null) => {
     setDokumenPlagiarisme(file);
-    setValue('dokumen_plagiarisme', file);
+    setValue('dokumen_plagiarisme', file || undefined);
+    
+    if (!file) return;
     
     // Track progress
     const handleProgress = (progress: number) => {
@@ -158,9 +164,11 @@ export function SemproForm({
     }
   };
   
-  const handleDraftUpload = async (file: File) => {
+  const handleDraftUpload = async (file: File | null) => {
     setDokumenDraft(file);
-    setValue('dokumen_draft', file);
+    setValue('dokumen_draft', file || undefined);
+    
+    if (!file) return;
     
     // Track progress
     const handleProgress = (progress: number) => {
@@ -191,8 +199,19 @@ export function SemproForm({
       return;
     }
     
+    // Required file validation
+    if (!dokumenTA012 || !dokumenPlagiarisme || !dokumenDraft) {
+      setUploadError('Semua dokumen harus diupload');
+      return;
+    }
+    
     // Reset upload error
     setUploadError(null);
+    
+    // Set file objects to the form data
+    data.dokumen_ta012 = dokumenTA012;
+    data.dokumen_plagiarisme = dokumenPlagiarisme;
+    data.dokumen_draft = dokumenDraft;
     
     console.log("Submitting form data:", data);
     onSubmit(data);
@@ -203,7 +222,7 @@ export function SemproForm({
       <CardHeader>
         <CardTitle>Pendaftaran Seminar Proposal</CardTitle>
       </CardHeader>
-      <form onSubmit={handleSubmit(onFormSubmit)}>
+      <form onSubmit={handleSubmit(onFormSubmit as any)}>
         <CardContent className="space-y-6">
           {/* Status mahasiswa info */}
           {mahasiswaData && (
@@ -216,11 +235,12 @@ export function SemproForm({
           
           {/* Upload error alert */}
           {uploadError && (
-            <Alert variant="destructive">
-              <AlertCircle className="h-4 w-4" />
-              <AlertTitle>Error</AlertTitle>
-              <AlertDescription>{uploadError}</AlertDescription>
-            </Alert>
+            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded relative" role="alert">
+              <div className="flex items-center">
+                <AlertCircle className="h-4 w-4 mr-2" />
+                <span className="block sm:inline">{uploadError}</span>
+              </div>
+            </div>
           )}
           
           {/* Tugas Akhir Selection */}
@@ -322,7 +342,10 @@ export function SemproForm({
           </Button>
           <Button 
             type="submit" 
-            disabled={isSubmitting || isUploading || uploadProgress.ta012 < 100 || uploadProgress.plagiarisme < 100 || uploadProgress.draft < 100}
+            disabled={isSubmitting || isUploading || 
+              (!!dokumenTA012 && uploadProgress.ta012 < 100) || 
+              (!!dokumenPlagiarisme && uploadProgress.plagiarisme < 100) || 
+              (!!dokumenDraft && uploadProgress.draft < 100)}
           >
             {isSubmitting ? 'Mendaftar...' : isUploading ? 'Mengunggah...' : 'Daftar Seminar Proposal'}
           </Button>

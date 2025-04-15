@@ -42,7 +42,13 @@ export function PenilaianSemproForm({
   const [strukturValue, setStrukturValue] = useState(70);
   
   // Calculate total score
-  const totalScore = (mediaValue + komunikasiValue + materiValue + isiValue + strukturValue) / 5;
+  const totalScore = (
+    Number(mediaValue) +
+    Number(komunikasiValue) +
+    Number(materiValue) +
+    Number(isiValue) +
+    Number(strukturValue)
+  ) / 5;
   
   const {
     register,

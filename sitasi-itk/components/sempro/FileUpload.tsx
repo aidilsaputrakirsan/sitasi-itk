@@ -10,7 +10,7 @@ interface FileUploadProps {
   id: string;
   acceptedFileTypes?: string;
   maxSize?: number; // in MB
-  onFileSelected: (file: File) => void;
+  onFileSelected: (file: File | null) => void; // Changed to accept null
   progress?: number;
   currentFile: File | null;
 }
@@ -112,7 +112,7 @@ export function FileUpload({
     if (inputRef.current) {
       inputRef.current.value = '';
     }
-    onFileSelected(null as any); // This will reset the file in parent component
+    onFileSelected(null); // Now correctly passing null
   };
   
   return (

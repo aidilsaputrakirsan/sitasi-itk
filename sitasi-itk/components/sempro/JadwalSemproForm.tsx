@@ -1,5 +1,5 @@
 // components/sempro/JadwalSemproForm.tsx
-'use client';
+// Sesuaikan dengan struktur tabel jadwal_sempros yang sudah ada
 
 import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
@@ -15,7 +15,7 @@ import { useDosens } from '@/hooks/useDosens';
 import { usePeriodeSempros } from '@/hooks/useSempro';
 import { Switch } from '@/components/ui/switch';
 
-// Schema validation for the form using Zod
+// Schema validation untuk form sesuaikan dengan struktur tabel yang ada
 const formSchema = z.object({
   periode_id: z.string().min(1, 'Periode harus dipilih'),
   pengajuan_ta_id: z.string(),
@@ -99,6 +99,11 @@ export function JadwalSemproForm({
     onSubmit(data);
   };
 
+  // Handle switch change with proper typing
+  const handlePublishedChange = (checked: boolean) => {
+    setValue('is_published', checked);
+  };
+
   return (
     <Card className="w-full">
       <CardHeader>
@@ -106,7 +111,7 @@ export function JadwalSemproForm({
       </CardHeader>
       <form onSubmit={handleSubmit(onFormSubmit)}>
         <CardContent className="space-y-6">
-          {/* Periode Selection */}
+          {/* Periode Selection - Gunakan data dari tabel periodes */}
           <div className="space-y-2">
             <Label htmlFor="periode_id">Periode Seminar</Label>
             <Select
@@ -235,9 +240,8 @@ export function JadwalSemproForm({
           <div className="flex items-center space-x-2">
             <Switch
               id="is_published"
-              {...register('is_published')}
-              checked={isPublished}
-              onCheckedChange={value => setValue('is_published', value)}
+              checked={!!isPublished}
+              onCheckedChange={handlePublishedChange}
             />
             <Label htmlFor="is_published" className="cursor-pointer">
               Publikasikan Jadwal
@@ -252,7 +256,7 @@ export function JadwalSemproForm({
           <Button variant="outline" type="button" onClick={() => window.history.back()}>
             Batal
           </Button>
-          <Button type="submit" disabled={isSubmitting}>
+          <Button type="submit" disabled={!!isSubmitting}>
             {isSubmitting ? 'Menyimpan...' : 'Simpan Jadwal'}
           </Button>
         </CardFooter>

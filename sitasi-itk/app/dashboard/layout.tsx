@@ -114,7 +114,7 @@ export default function DashboardLayout({
     const dosenItems = [
       { name: 'Mahasiswa Bimbingan', href: '/dashboard/bimbingan', icon: <UserIcon /> },
       { name: 'Pengajuan TA', href: '/dashboard/pengajuan', icon: <DocumentIcon /> }, // Added this item
-      { name: 'Jadwal Sempro', href: '/dashboard/jadwal-sempro', icon: <CalendarIcon /> },
+      { name: 'Jadwal Sempro', href: '/dashboard/sempro', icon: <CalendarIcon /> },
       { name: 'Jadwal Sidang', href: '/dashboard/jadwal-sidang', icon: <CalendarIcon /> },
       { name: 'Penilaian', href: '/dashboard/penilaian', icon: <DocumentIcon /> },
       { name: 'Referensi', href: '/dashboard/referensi', icon: <BookOpenIcon /> },
@@ -125,7 +125,7 @@ export default function DashboardLayout({
       { name: 'Data Dosen', href: '/dashboard/data-dosen', icon: <UserIcon /> },
       { name: 'Pengajuan TA', href: '/dashboard/pengajuan', icon: <DocumentIcon /> }, // Changed from '/dashboard/data-pengajuan'
       { name: 'Periode', href: '/dashboard/periode', icon: <CalendarIcon /> },
-      { name: 'Jadwal Sempro', href: '/dashboard/kelola-sempro', icon: <CalendarIcon /> },
+      { name: 'Jadwal Sempro', href: '/dashboard/sempro', icon: <CalendarIcon /> },
       { name: 'Jadwal Sidang', href: '/dashboard/kelola-sidang', icon: <CalendarIcon /> },
       { name: 'Katalog TA', href: '/dashboard/kelola-katalog', icon: <BookOpenIcon /> },
     ];

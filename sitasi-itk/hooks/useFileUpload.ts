@@ -5,9 +5,11 @@ import { useState, useCallback } from 'react';
 import { FileMetadata } from '@/types/sempro';
 import { useToast } from './use-toast';
 import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/lib/supabase'; // Import supabase
 
 // GAS endpoint URL - ganti dengan URL deployment script Anda
-const GAS_API_URL = process.env.NEXT_PUBLIC_GAS_API_URL || 'https://script.google.com/macros/s/DEPLOY_ID_ANDA/exec';
+const GAS_API_URL = process.env.NEXT_PUBLIC_GAS_API_URL || 'https://script.google.com/macros/s/AKfycbz32C-pY_1w4VQP4RNnCMCrSwZhz94J64KHsAO45K1idEu0YrNB1QNxHSm5Y_zMp75UiA/exec';
+const SEMPRO_FOLDER_ID = process.env.NEXT_PUBLIC_SEMPRO_FOLDER_ID || '1y-4qBRLQnkLezBcYYf_N6kMxqaUXa6Lx';
 
 interface UploadResult {
   status: string;
@@ -55,6 +57,9 @@ export function useFileUpload() {
         // Add folder ID if specified
         if (options?.folderId) {
           formData.append('folderId', options.folderId);
+        } else {
+          // Default folder ID
+          formData.append('folderId', SEMPRO_FOLDER_ID);
         }
         
         // Add folder name if specified

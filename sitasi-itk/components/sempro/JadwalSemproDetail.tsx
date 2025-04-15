@@ -43,13 +43,13 @@ export function JadwalSemproDetail({
   const [publishState, setPublishState] = useState(jadwal.is_published);
   
   // Handle publish toggle
-  const handlePublishChange = (value: boolean) => {
+  const handlePublishChange = (checked: boolean) => {
     if (userRole !== 'tendik' && userRole !== 'koorpro') return;
     
-    setPublishState(value);
+    setPublishState(checked);
     updateJadwal({
       id: jadwal.id,
-      data: { is_published: value }
+      data: { is_published: checked }
     });
   };
 

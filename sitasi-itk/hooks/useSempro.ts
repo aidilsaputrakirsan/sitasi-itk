@@ -333,8 +333,9 @@ export function usePeriodeSempros() {
     queryKey: ['periode-sempros'],
     queryFn: async () => {
       try {
+        // Gunakan tabel periodes yang sudah ada
         const { data, error } = await supabase
-          .from('periode_sempros')
+          .from('periodes')
           .select('*')
           .order('tanggal_mulai', { ascending: false });
         
@@ -343,7 +344,13 @@ export function usePeriodeSempros() {
           throw error;
         }
         
-        return data as PeriodeSempro[];
+        return data.map(periode => ({
+          id: periode.id,
+          nama_periode: periode.nama_periode,
+          tanggal_mulai: periode.mulai_daftar || periode.created_at,
+          tanggal_selesai: periode.selesai_daftar || periode.updated_at,
+          is_active: periode.is_active
+        }));
       } catch (error) {
         console.error("Error in usePeriodeSempros:", error);
         return [];
@@ -359,17 +366,23 @@ export function useActivePeriodeSempros() {
     queryFn: async () => {
       try {
         const { data, error } = await supabase
-          .from('periode_sempros')
+          .from('periodes')
           .select('*')
           .eq('is_active', true)
-          .order('tanggal_mulai', { ascending: false });
+          .order('created_at', { ascending: false });
         
         if (error) {
           console.error("Error fetching active periode sempros:", error);
           throw error;
         }
         
-        return data as PeriodeSempro[];
+        return data.map(periode => ({
+          id: periode.id,
+          nama_periode: periode.nama_periode,
+          tanggal_mulai: periode.mulai_daftar || periode.created_at,
+          tanggal_selesai: periode.selesai_daftar || periode.updated_at,
+          is_active: periode.is_active
+        }));
       } catch (error) {
         console.error("Error in useActivePeriodeSempros:", error);
         return [];
@@ -562,24 +575,9 @@ export function useCreateSempro() {
           throw new Error('Semua dokumen harus diupload');
         }
         
-        // Upload files to Google Drive
-        const uploadTA012Promise = uploadFile(formValues.dokumen_ta012, { folderId: SEMPRO_FOLDER_ID });
-        const uploadPlagiarismPromise = uploadFile(formValues.dokumen_plagiarisme, { folderId: SEMPRO_FOLDER_ID });
-        const uploadDraftPromise = uploadFile(formValues.dokumen_draft, { folderId: SEMPRO_FOLDER_ID });
-        
-        const [dokumen_ta012, dokumen_plagiarisme, dokumen_draft] = await Promise.all([
-          uploadTA012Promise,
-          uploadPlagiarismPromise,
-          uploadDraftPromise
-        ]);
-        
-        if (!dokumen_ta012 || !dokumen_plagiarisme || !dokumen_draft) {
-          throw new Error('Gagal mengupload salah satu atau beberapa dokumen');
-        }
-        
         // Check if user has registered in an active period
         const { data: periodeData, error: periodeError } = await supabase
-          .from('periode_sempros')
+          .from('periodes')  // Gunakan tabel periodes yang ada
           .select('id')
           .eq('is_active', true)
           .order('created_at', { ascending: false })
@@ -590,6 +588,34 @@ export function useCreateSempro() {
           throw new Error('Tidak ada periode pendaftaran sempro yang aktif saat ini');
         }
         
+        // Upload files ke Google Drive
+        let form_ta_012_url = "";
+        let bukti_plagiasi_url = "";
+        let proposal_ta_url = "";
+        
+        try {
+          // Upload file TA-012
+          const ta012Metadata = await uploadFile(formValues.dokumen_ta012, { 
+            description: 'Form TA-012 untuk pendaftaran seminar proposal' 
+          });
+          if (ta012Metadata) form_ta_012_url = ta012Metadata.fileUrl;
+          
+          // Upload file bukti plagiasi
+          const plagiarismMetadata = await uploadFile(formValues.dokumen_plagiarisme, { 
+            description: 'Hasil cek plagiarisme untuk pendaftaran seminar proposal' 
+          });
+          if (plagiarismMetadata) bukti_plagiasi_url = plagiarismMetadata.fileUrl;
+          
+          // Upload file draft proposal
+          const draftMetadata = await uploadFile(formValues.dokumen_draft, { 
+            description: 'Draft proposal untuk pendaftaran seminar proposal' 
+          });
+          if (draftMetadata) proposal_ta_url = draftMetadata.fileUrl;
+        } catch (error) {
+          console.error('Error uploading files:', error);
+          throw new Error('Gagal mengupload dokumen: ' + (error instanceof Error ? error.message : String(error)));
+        }
+        
         // Create the sempro record
         const { data, error } = await supabase
           .from('sempros')
@@ -597,12 +623,14 @@ export function useCreateSempro() {
             {
               user_id: user.id,
               pengajuan_ta_id: formValues.pengajuan_ta_id,
-              tanggal_daftar: new Date().toISOString(),
-              catatan: formValues.catatan || null,
-              status: 'registered',
-              dokumen_ta012,
-              dokumen_plagiarisme,
-              dokumen_draft
+              periode_id: periodeData.id,      // Gunakan periode_id dari active periode
+              tanggal: new Date().toISOString(), // Gunakan kolom tanggal yang ada
+              form_ta_012: form_ta_012_url,    // Sesuaikan dengan nama kolom di tabel
+              bukti_plagiasi: bukti_plagiasi_url, // Sesuaikan dengan nama kolom di tabel
+              proposal_ta: proposal_ta_url,    // Sesuaikan dengan nama kolom di tabel 
+              status: 'registered',            // Status awal
+              approve_pembimbing_1: false,     // Default false
+              approve_pembimbing_2: false      // Default false
             }
           ])
           .select();
@@ -622,9 +650,10 @@ export function useCreateSempro() {
           .insert([
             {
               sempro_id: data[0].id,
+              pengajuan_ta_id: formValues.pengajuan_ta_id,
               user_id: user.id,
-              keterangan: 'Pendaftaran seminar proposal',
-              status: 'registered'
+              status: 'registered',
+              keterangan: 'Pendaftaran seminar proposal'
             }
           ]);
         
@@ -1006,7 +1035,31 @@ export function useUpdateJadwalSempro() {
   });
 }
 
-// Create periode sempro
+function getSemesterFromPeriode(periodeName: string): string {
+  // Contoh format: "Semester Genap 2024/2025"
+  if (periodeName.toLowerCase().includes('ganjil')) {
+    return 'Ganjil';
+  } else if (periodeName.toLowerCase().includes('genap')) {
+    return 'Genap';
+  } else {
+    return 'Reguler'; // Default value
+  }
+}
+
+// Helper function to extract year from periode name
+function getYearFromPeriode(periodeName: string): string {
+  // Contoh format: "Semester Genap 2024/2025"
+  const yearMatch = periodeName.match(/\d{4}\/\d{4}/);
+  if (yearMatch) {
+    return yearMatch[0];
+  } else {
+    // Jika format tidak sesuai, gunakan tahun sekarang
+    const currentYear = new Date().getFullYear();
+    return `${currentYear}/${currentYear + 1}`;
+  }
+}
+
+// Create periode
 export function useCreatePeriodeSempro() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -1021,11 +1074,22 @@ export function useCreatePeriodeSempro() {
           throw new Error('Semua field periode harus diisi');
         }
         
-        // Create periode sempro record
+        // Extract semester and year from periode name
+        const semester = getSemesterFromPeriode(formValues.nama_periode);
+        const tahun = getYearFromPeriode(formValues.nama_periode);
+        
+        // Create periodes record
         const { data, error } = await supabase
-          .from('periode_sempros')
+          .from('periodes')  // Gunakan tabel 'periodes'
           .insert([{
-            ...formValues
+            nama_periode: formValues.nama_periode,
+            semester: semester,
+            tahun: tahun,
+            is_active: formValues.is_active,
+            mulai_daftar: formValues.tanggal_mulai,
+            selesai_daftar: formValues.tanggal_selesai,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
           }])
           .select();
           
@@ -1075,13 +1139,25 @@ export function useUpdatePeriodeSempro() {
       try {
         console.log("Updating periode sempro with data:", data);
         
-        // Update periode sempro
+        // Map data ke struktur tabel periodes
+        const updateData: any = {};
+        if (data.nama_periode) updateData.nama_periode = data.nama_periode;
+        if (data.tanggal_mulai) updateData.mulai_daftar = data.tanggal_mulai;
+        if (data.tanggal_selesai) updateData.selesai_daftar = data.tanggal_selesai;
+        if (data.is_active !== undefined) updateData.is_active = data.is_active;
+        
+        // Tambahkan semester dan tahun jika nama periode berubah
+        if (data.nama_periode) {
+          updateData.semester = getSemesterFromPeriode(data.nama_periode);
+          updateData.tahun = getYearFromPeriode(data.nama_periode);
+        }
+        
+        updateData.updated_at = new Date().toISOString();
+        
+        // Update periodes table
         const { data: updatedData, error } = await supabase
-          .from('periode_sempros')
-          .update({
-            ...data,
-            updated_at: new Date().toISOString()
-          })
+          .from('periodes')
+          .update(updateData)
           .eq('id', id)
           .select();
           

@@ -64,6 +64,11 @@ export function PeriodeSemproForm({
     onSubmit(data);
   };
 
+  // Handle switch change with proper typing
+  const handleActiveChange = (checked: boolean) => {
+    setValue('is_active', checked);
+  };
+
   return (
     <Card className="w-full">
       <CardHeader>
@@ -115,9 +120,8 @@ export function PeriodeSemproForm({
           <div className="flex items-center space-x-2 pt-4">
             <Switch
               id="is_active"
-              {...register('is_active')}
               checked={isActive}
-              onCheckedChange={value => setValue('is_active', value)}
+              onCheckedChange={handleActiveChange}
             />
             <Label htmlFor="is_active" className="cursor-pointer">
               Aktifkan Periode
