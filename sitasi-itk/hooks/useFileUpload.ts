@@ -8,7 +8,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase'; // Import supabase
 
 // GAS endpoint URL - ganti dengan URL deployment script Anda
-const GAS_API_URL = process.env.NEXT_PUBLIC_GAS_API_URL || 'https://script.google.com/macros/s/AKfycbz32C-pY_1w4VQP4RNnCMCrSwZhz94J64KHsAO45K1idEu0YrNB1QNxHSm5Y_zMp75UiA/exec';
+const GAS_API_URL = process.env.NEXT_PUBLIC_GAS_API_URL || 'https://script.google.com/macros/s/AKfycbxz63IfG1HLhZxMzFJFQtHshqrEj3rxkt_gz8OaXfI59pAKuRWe8l0yLd1wyB6Vm4bUyQ/exec';
 const SEMPRO_FOLDER_ID = process.env.NEXT_PUBLIC_SEMPRO_FOLDER_ID || '1y-4qBRLQnkLezBcYYf_N6kMxqaUXa6Lx';
 
 interface UploadResult {
@@ -35,6 +35,7 @@ export function useFileUpload() {
   const { toast } = useToast();
   const { user } = useAuth();
 
+  // Perbaikan pada fungsi uploadFile di hooks/useFileUpload.ts
   const uploadFile = useCallback(
     async (file: File, options?: UploadOptions): Promise<FileMetadata | null> => {
       if (!file) {
@@ -52,7 +53,9 @@ export function useFileUpload() {
       try {
         // Create FormData for the file upload
         const formData = new FormData();
-        formData.append('file', file);
+        
+        // Penting: Nama parameter harus 'file' sesuai dengan GAS
+        formData.append('file', file, file.name); // Tambahkan nama file sebagai parameter ketiga
         
         // Add folder ID if specified
         if (options?.folderId) {
@@ -62,23 +65,13 @@ export function useFileUpload() {
           formData.append('folderId', SEMPRO_FOLDER_ID);
         }
         
-        // Add folder name if specified
-        if (options?.folderName) {
-          formData.append('folderName', options.folderName);
+        // Tambahkan info mahasiswa
+        if (options?.studentId) {
+          formData.append('studentId', options.studentId);
         }
         
-        // Add student info if available
-        if (user) {
-          const { data: mahasiswaData } = await supabase
-            .from('mahasiswas')
-            .select('nama, nim')
-            .eq('user_id', user.id)
-            .single();
-            
-          if (mahasiswaData) {
-            formData.append('studentId', mahasiswaData.nim);
-            formData.append('studentName', mahasiswaData.nama);
-          }
+        if (options?.studentName) {
+          formData.append('studentName', options.studentName);
         }
         
         // Add description if specified
@@ -86,11 +79,10 @@ export function useFileUpload() {
           formData.append('description', options.description);
         }
 
-        // For simulating upload progress
+        // Simulasi progress (tetap dipertahankan)
         const startTime = Date.now();
         const simulateProgress = () => {
           const elapsed = Date.now() - startTime;
-          // Simulate progress up to 90% (last 10% after server responds)
           const progress = Math.min(90, Math.floor((elapsed / 3000) * 100));
           setUploadProgress(progress);
           options?.onProgress?.(progress);
@@ -101,17 +93,23 @@ export function useFileUpload() {
         };
         simulateProgress();
 
-        // Send request to GAS API
+        // Log FormData untuk debugging
+        console.log("Sending FormData to GAS:", Array.from(formData.entries()));
+
+        // Kirim dengan mode 'no-cors' untuk menghindari masalah CORS
         const response = await fetch(GAS_API_URL, {
           method: 'POST',
           body: formData,
+          // Hilangkan header Content-Type agar browser mengatur sendiri multipart/form-data dengan boundary yang benar
         });
 
         if (!response.ok) {
+          console.error("Upload response error:", response.status, response.statusText);
           throw new Error(`Upload gagal: ${response.statusText}`);
         }
 
-        const result: UploadResult = await response.json();
+        const result = await response.json();
+        console.log("GAS response:", result);
         
         if (result.status === 'error') {
           throw new Error(result.message || 'Terjadi kesalahan saat upload file');

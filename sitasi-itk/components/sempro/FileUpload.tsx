@@ -1,4 +1,4 @@
-// components/sempro/FileUpload.tsx
+// components/sempro/FileUpload.tsx - perbaikan
 'use client';
 
 import React, { useState, useRef } from 'react';
@@ -69,6 +69,7 @@ export function FileUpload({
     e.preventDefault();
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
+      console.log("File selected:", file.name, file.size); // Debug log
       if (validateFile(file)) {
         onFileSelected(file);
       }
@@ -94,6 +95,7 @@ export function FileUpload({
     
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       const file = e.dataTransfer.files[0];
+      console.log("File dropped:", file.name, file.size); // Debug log
       if (validateFile(file)) {
         onFileSelected(file);
       }
@@ -112,7 +114,7 @@ export function FileUpload({
     if (inputRef.current) {
       inputRef.current.value = '';
     }
-    onFileSelected(null); // Now correctly passing null
+    onFileSelected(null);
   };
   
   return (

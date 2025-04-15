@@ -92,6 +92,18 @@ export interface JadwalSempro {
   };
 }
 
+export interface SemproFormValues {
+  pengajuan_ta_id: string;
+  catatan?: string;
+  dokumen_ta012?: File | null;
+  dokumen_plagiarisme?: File | null;
+  dokumen_draft?: File | null;
+  // Tambahkan properti metadata (opsional)
+  dokumen_ta012_metadata?: FileMetadata;
+  dokumen_plagiarisme_metadata?: FileMetadata;
+  dokumen_draft_metadata?: FileMetadata;
+}
+
 export interface PenilaianSempro {
   id: string;
   sempro_id: string;

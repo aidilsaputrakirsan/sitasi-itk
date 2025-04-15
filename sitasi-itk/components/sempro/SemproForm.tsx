@@ -112,6 +112,8 @@ export function SemproForm({
     
     if (!file) return;
     
+    console.log("Uploading TA-012:", file.name, file.size, file.type); // Debug log
+    
     // Track progress
     const handleProgress = (progress: number) => {
       setUploadProgress(prev => ({ ...prev, ta012: progress }));
@@ -120,8 +122,8 @@ export function SemproForm({
     try {
       // Upload immediately to Google Drive
       const fileMetadata = await uploadFile(file, {
-        studentId: mahasiswaData?.nim,
-        studentName: mahasiswaData?.nama,
+        studentId: mahasiswaData?.nim || '',
+        studentName: mahasiswaData?.nama || '',
         description: 'Form TA-012 untuk pendaftaran seminar proposal',
         onProgress: handleProgress
       });
@@ -129,6 +131,10 @@ export function SemproForm({
       if (!fileMetadata) {
         throw new Error('Gagal mengupload Form TA-012');
       }
+      
+      // Perubahan penting: Debug log dan tambahkan metadata ke formValues
+      console.log("TA-012 Upload Success:", fileMetadata);
+      setValue('dokumen_ta012_metadata', fileMetadata);
     } catch (error) {
       console.error('Error uploading TA-012:', error);
       setUploadError('Gagal mengupload File TA-012. Silakan coba lagi.');
