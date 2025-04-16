@@ -84,20 +84,23 @@ export function SemproDetail({
   const [newStatus, setNewStatus] = useState<StatusSempro>('verified');
   const [statusNote, setStatusNote] = useState('');
   
-  // Membuat objek FileMetadata dari URL
-  const dokumenTA012 = typeof sempro.dokumen_ta012 === 'object' ? sempro.dokumen_ta012 : 
-    createFileMetadata(sempro.dokumen_ta012 as unknown as string, 'TA-012');
-  const dokumenPlagiarisme = typeof sempro.dokumen_plagiarisme === 'object' ? sempro.dokumen_plagiarisme :
-    createFileMetadata(sempro.dokumen_plagiarisme as unknown as string, 'Plagiarisme');
-  const dokumenDraft = typeof sempro.dokumen_draft === 'object' ? sempro.dokumen_draft :
-    createFileMetadata(sempro.dokumen_draft as unknown as string, 'Proposal');
+  // Membuat objek FileMetadata dari URL menggunakan as untuk type casting
+  const dokumenTA012 = createFileMetadata(sempro.form_ta_012, 'TA-012');
+  const dokumenPlagiarisme = createFileMetadata(sempro.bukti_plagiasi, 'Plagiarisme');
+  const dokumenDraft = createFileMetadata(sempro.proposal_ta, 'Proposal');
 
   // Logging untuk debugging
   useEffect(() => {
+    console.log("Dokumen dari database:");
+    console.log("form_ta_012:", sempro.form_ta_012);
+    console.log("bukti_plagiasi:", sempro.bukti_plagiasi);
+    console.log("proposal_ta:", sempro.proposal_ta);
+    
+    console.log("Metadata hasil konversi:");
     console.log("dokumenTA012:", dokumenTA012);
     console.log("dokumenPlagiarisme:", dokumenPlagiarisme);
     console.log("dokumenDraft:", dokumenDraft);
-  }, [dokumenTA012, dokumenPlagiarisme, dokumenDraft]);
+  }, [sempro]);
   
   // Handle status update
   const handleStatusUpdate = () => {
@@ -276,20 +279,6 @@ export function SemproDetail({
                         <span>Jadwal belum dipublikasikan</span>
                       </div>
                     )}
-                  </div>
-                </div>
-              </>
-            )}
-            
-            {/* Catatan section if available */}
-            {sempro.catatan && (
-              <>
-                <Separator />
-                
-                <div className="space-y-2">
-                  <h4 className="font-medium">Catatan</h4>
-                  <div className="p-3 bg-gray-50 rounded-md">
-                    <p className="text-gray-700 whitespace-pre-line">{sempro.catatan}</p>
                   </div>
                 </div>
               </>

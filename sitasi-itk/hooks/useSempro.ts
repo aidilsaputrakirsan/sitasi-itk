@@ -640,9 +640,9 @@ export function useCreateSempro() {
           pengajuan_ta_id: formValues.pengajuan_ta_id,
           periode_id: periodeData.id,
           tanggal: new Date().toISOString(),
-          form_ta_012: ta012Url, 
-          bukti_plagiasi: plagiarismeUrl,
-          proposal_ta: draftUrl,
+          form_ta_012: ta012Url,         // Nama kolom yang benar
+          bukti_plagiasi: plagiarismeUrl, // Nama kolom yang benar
+          proposal_ta: draftUrl,          // Nama kolom yang benar
           status: 'registered'
         };
         
@@ -758,12 +758,11 @@ export function useUpdateSemproStatus() {
       try {
         console.log(`Updating sempro status to ${status} for ID: ${id}`);
         
-        // Update the sempro status
+        // Update hanya status, tanpa field catatan
         const { data, error } = await supabase
           .from('sempros')
           .update({
             status,
-            catatan: catatan || null,
             updated_at: new Date().toISOString()
           })
           .eq('id', id)
@@ -774,11 +773,11 @@ export function useUpdateSemproStatus() {
           throw error;
         }
         
-        // Add riwayat record
+        // Add riwayat record with catatan
         let keterangan = '';
         switch (status) {
           case 'verified':
-            keterangan = 'Dokumen telah diverifikasi oleh admin';
+            keterangan = catatan || 'Dokumen telah diverifikasi oleh admin';
             break;
           case 'scheduled':
             keterangan = 'Seminar telah dijadwalkan';
@@ -796,11 +795,15 @@ export function useUpdateSemproStatus() {
             keterangan = `Status berubah menjadi ${status}`;
         }
         
+        // Tambahkan logging untuk debugging
+        console.log("Menambahkan riwayat dengan keterangan:", keterangan);
+        
         await supabase
           .from('riwayat_pendaftaran_sempros')
           .insert([
             {
               sempro_id: id,
+              pengajuan_ta_id: data?.[0]?.pengajuan_ta_id,
               user_id: user.id,
               keterangan,
               status

@@ -5,7 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { SemproForm } from '@/components/sempro/SemproForm';
 import { useCreateSempro, useActivePeriodeSempros } from '@/hooks/useSempro';
 import { SemproFormValues } from '@/types/sempro';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
 
 export default function RegisterSemproPage() {
@@ -14,6 +14,7 @@ export default function RegisterSemproPage() {
   const { toast } = useToast();
   const { mutate: createSempro, isPending } = useCreateSempro();
   const { data: activePeriodes, isLoading: isLoadingPeriodes } = useActivePeriodeSempros();
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   // Check if user is student
   const isMahasiswa = user?.roles.includes('mahasiswa');
@@ -33,12 +34,22 @@ export default function RegisterSemproPage() {
     }
   }, [isLoadingPeriodes, hasActivePeriod, router, toast]);
 
+  // Perbaikan: Hapus kode redirect di sini, biarkan hook useCreateSempro yang menanganinya
   const handleSubmit = (formValues: SemproFormValues) => {
-    createSempro(formValues, {
-      onSuccess: () => {
-        router.push('/dashboard/sempro');
-      }
-    });
+    setSubmitError(null);
+    try {
+      console.log("Form submitted with values:", formValues);
+      // Panggil createSempro tanpa callback onSuccess, karena akan ditangani di hook
+      createSempro(formValues, {
+        onError: (error) => {
+          console.error("Error submitting form:", error);
+          setSubmitError(error.message || "Terjadi kesalahan saat pendaftaran");
+        }
+      });
+    } catch (error) {
+      console.error("Unexpected error:", error);
+      setSubmitError(error instanceof Error ? error.message : "Terjadi kesalahan yang tidak diketahui");
+    }
   };
 
   if (!user) {
@@ -78,6 +89,13 @@ export default function RegisterSemproPage() {
   return (
     <div className="container mx-auto px-4 py-6">
       <h1 className="text-2xl font-semibold text-gray-900 mb-6">Pendaftaran Seminar Proposal</h1>
+      
+      {submitError && (
+        <div className="bg-red-50 border border-red-200 rounded-md p-4 mb-6 text-red-800">
+          <h3 className="font-medium">Error</h3>
+          <p className="text-sm mt-1">{submitError}</p>
+        </div>
+      )}
       
       <div className="bg-blue-50 border border-blue-200 rounded-md p-4 mb-6 text-blue-800">
         <h3 className="font-medium">Periode Pendaftaran Aktif</h3>

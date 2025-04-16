@@ -21,14 +21,22 @@ export interface Sempro {
   user_id: string;
   pengajuan_ta_id: string;
   status: StatusSempro;
-  tanggal_daftar: string;
-  catatan: string | null;
-  // File metadata untuk dokumen yang diupload
-  dokumen_ta012: FileMetadata | null;
-  dokumen_plagiarisme: FileMetadata | null;
-  dokumen_draft: FileMetadata | null;
+  tanggal: string; // Sesuai database, bukan tanggal_daftar
+  // catatan: string | null; // Hapus jika tidak ada di database
+  
+  // Nama field sesuai database
+  form_ta_012: string | null;
+  bukti_plagiasi: string | null;
+  proposal_ta: string | null;
+  
+  // Keep these for backwards compatibility (jika kode lain masih menggunakannya)
+  dokumen_ta012?: FileMetadata | null;
+  dokumen_plagiarisme?: FileMetadata | null; 
+  dokumen_draft?: FileMetadata | null;
+  
   created_at: string;
   updated_at: string;
+  
   // Relations
   mahasiswa?: {
     id?: string;
