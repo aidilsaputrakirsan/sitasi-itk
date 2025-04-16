@@ -20,7 +20,8 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { UserRole } from '@/types/auth';
 import { useToast } from './use-toast';
-import { useFirebaseStorage } from '@/hooks/useFirebaseStorage';
+//import { useFirebaseStorage } from '@/hooks/useFirebaseStorage';
+import { useGoogleDriveStorage } from '@/hooks/useGoogleDriveStorage';
 
 // Google Drive folder ID untuk menyimpan dokumen sempro
 const SEMPRO_FOLDER_ID = process.env.NEXT_PUBLIC_SEMPRO_FOLDER_ID || '1y-4qBRLQnkLezBcYYf_N6kMxqaUXa6Lx';
@@ -599,24 +600,21 @@ export function useCreateSempro() {
         // Create the sempro record with file metadata
         // Create the sempro record with file metadata
         const { data, error } = await supabase
-        .from('sempros')
-        .insert([
-          {
-            user_id: user.id,
-            pengajuan_ta_id: formValues.pengajuan_ta_id,
-            periode_id: periodeData.id,
-            tanggal: new Date().toISOString(), // Changed from tanggal_daftar
-            // Use the correct field names and store just the URL or the format expected by the DB
-            form_ta_012: formValues.dokumen_ta012_metadata.fileUrl,
-            bukti_plagiasi: formValues.dokumen_plagiarisme_metadata.fileUrl,
-            proposal_ta: formValues.dokumen_draft_metadata.fileUrl,
-            status: 'registered',
-            approve_pembimbing_1: false,
-            approve_pembimbing_2: false
-            // Remove catatan since it doesn't exist in the database
-          }
-        ])
-        
+          .from('sempros')
+          .insert([
+            {
+              user_id: user.id,
+              pengajuan_ta_id: formValues.pengajuan_ta_id,
+              periode_id: periodeData.id,
+              tanggal: new Date().toISOString(), // Gunakan 'tanggal' bukan 'tanggal_daftar'
+              // Simpan URL file, bukan metadata lengkap:
+              form_ta_012: formValues.dokumen_ta012_metadata.fileUrl, // Gunakan form_ta_012 bukan dokumen_ta012
+              bukti_plagiasi: formValues.dokumen_plagiarisme_metadata.fileUrl, // Gunakan bukti_plagiasi bukan dokumen_plagiarisme
+              proposal_ta: formValues.dokumen_draft_metadata.fileUrl, // Gunakan proposal_ta bukan dokumen_draft
+              status: 'registered'
+              // Hapus field catatan karena tidak ada di database Anda
+            }
+          ])
           .select();
         
         if (error) {

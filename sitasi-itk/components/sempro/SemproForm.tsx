@@ -17,7 +17,9 @@ import { FileUpload } from './FileUpload';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { AlertCircle } from 'lucide-react';
-import { useFirebaseStorage } from '@/hooks/useFirebaseStorage';
+//import { useFirebaseStorage } from '@/hooks/useFirebaseStorage';
+import { useGoogleDriveStorage } from '@/hooks/useGoogleDriveStorage';
+
 
 // Adjusted schema validation untuk file dan metadata
 const formSchema = z.object({
@@ -44,7 +46,8 @@ export function SemproForm({
 }: SemproFormProps) {
   // Fetch student's thesis proposals for the dropdown
   const { data: pengajuanList, isLoading: isLoadingPengajuan } = useStudentPengajuanTAforSempro();
-  const { uploadFile, isUploading } = useFirebaseStorage();
+  //const { uploadFile, isUploading } = useFirebaseStorage();
+  const { uploadFile, isUploading } = useGoogleDriveStorage();
   const { user } = useAuth();
   
   // State for mahasiswa data
@@ -251,43 +254,54 @@ export function SemproForm({
     }
   };
 
+  const [debugInfo, setDebugInfo] = useState("");
+
   // In components/sempro/SemproForm.tsx - add better error handling in onFormSubmit
   const onFormSubmit = async (data: SemproFormValues) => {
     try {
-      console.log("Starting form submission with data:", data);
+      setDebugInfo("Memulai proses pendaftaran...");
       
       if (isUploading) {
         setUploadError('Mohon tunggu hingga semua file selesai diupload');
         return;
       }
       
-      // Required file validation - periksa metadata, bukan file
       if (!dokumenTA012Metadata || !dokumenPlagiarismeMetadata || !dokumenDraftMetadata) {
         setUploadError('Semua dokumen harus diupload');
         return;
       }
       
-      // Reset upload error
       setUploadError(null);
       
-      // Pastikan metadata digunakan untuk pengiriman data
+      // Log data untuk debugging
+      console.log("Data form:", data);
+      console.log("File metadata:", {
+        ta012: dokumenTA012Metadata,
+        plagiarisme: dokumenPlagiarismeMetadata,
+        draft: dokumenDraftMetadata
+      });
+      
+      setDebugInfo("Semua file siap, mengirim data pendaftaran...");
+      
+      // Pastikan metadata digunakan untuk pengiriman
       data.dokumen_ta012_metadata = dokumenTA012Metadata;
       data.dokumen_plagiarisme_metadata = dokumenPlagiarismeMetadata;
       data.dokumen_draft_metadata = dokumenDraftMetadata;
       
-      console.log("Submitting form with metadata:", {
-        ta012: dokumenTA012Metadata.fileUrl,
-        plagiarisme: dokumenPlagiarismeMetadata.fileUrl,
-        draft: dokumenDraftMetadata.fileUrl
-      });
-      
       await onSubmit(data);
-      console.log("Form submission completed successfully!");
+      setDebugInfo("Pendaftaran berhasil!");
     } catch (error) {
-      console.error("Error in form submission:", error);
+      console.error("Error saat pendaftaran:", error);
+      setDebugInfo(`Error: ${error instanceof Error ? error.message : "Unknown error"}`);
       setUploadError(`Gagal mendaftar: ${error instanceof Error ? error.message : "Unknown error"}`);
     }
   };
+
+  {debugInfo && (
+    <div className="mt-4 p-3 bg-gray-100 border rounded text-xs">
+      <p className="font-mono">{debugInfo}</p>
+    </div>
+  )}
 
   return (
     <Card className="w-full">
