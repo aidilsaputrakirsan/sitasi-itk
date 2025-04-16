@@ -17,7 +17,8 @@ export function useGoogleDriveStorage() {
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const { toast } = useToast();
 
-  const uploadFile = useCallback(
+  // Di dalam hook useGoogleDriveStorage
+const uploadFile = useCallback(
     async (file: File, options?: UploadOptions): Promise<FileMetadata | null> => {
       if (!file) {
         toast({
@@ -27,21 +28,12 @@ export function useGoogleDriveStorage() {
         });
         return null;
       }
-
+  
       setIsUploading(true);
       setUploadProgress(0);
-
+  
       try {
         console.log("Memulai upload file:", file.name, "Ukuran:", file.size);
-        
-        // Ambil GAS endpoint dari env variable
-        const gasEndpoint = process.env.NEXT_PUBLIC_GAS_ENDPOINT;
-        
-        if (!gasEndpoint) {
-          throw new Error("GAS endpoint tidak dikonfigurasi");
-        }
-        
-        console.log("Menggunakan GAS endpoint:", gasEndpoint);
         
         // Baca file sebagai base64
         const fileBase64 = await readFileAsBase64(file);
@@ -57,32 +49,34 @@ export function useGoogleDriveStorage() {
             return newProgress;
           });
         }, 300);
-
-        console.log("Mengirim request ke GAS...");
+  
+        console.log("Mengirim request ke proxy API...");
         
-        // Menggunakan XMLHttpRequest untuk mengatasi masalah CORS
-        const result = await uploadWithXHR(gasEndpoint, {
+        // Menggunakan endpoint proxy lokal alih-alih langsung ke GAS
+        const endpoint = '/api/upload-proxy';
+        
+        const result = await uploadWithXHR(endpoint, {
           fileName: file.name,
           fileType: file.type,
           fileData: fileBase64,
           description: options?.description || `Uploaded by ${options?.studentName || 'user'}`
         });
-
+  
         clearInterval(progressInterval);
         
         if (!result.success) {
           throw new Error(result.error || 'Upload gagal tanpa pesan error');
         }
-
+  
         // Set progress 100%
         setUploadProgress(100);
         options?.onProgress?.(100);
-
+  
         toast({
           title: "Upload Berhasil",
           description: `File ${file.name} berhasil diupload`,
         });
-
+  
         // Buat metadata lengkap
         const metadata: FileMetadata = {
           fileId: result.fileId,
@@ -91,7 +85,7 @@ export function useGoogleDriveStorage() {
           fileType: file.type,
           uploadedAt: result.uploadedAt || new Date().toISOString()
         };
-
+  
         console.log("File metadata:", metadata);
         return metadata;
       } catch (error) {
