@@ -597,24 +597,26 @@ export function useCreateSempro() {
         console.log("Menggunakan metadata file yang sudah diupload sebelumnya");
         
         // Create the sempro record with file metadata
+        // Create the sempro record with file metadata
         const { data, error } = await supabase
-          .from('sempros')
-          .insert([
-            {
-              user_id: user.id,
-              pengajuan_ta_id: formValues.pengajuan_ta_id,
-              periode_id: periodeData.id,
-              tanggal_daftar: new Date().toISOString(),
-              // Simpan metadata file
-              dokumen_ta012: formValues.dokumen_ta012_metadata,
-              dokumen_plagiarisme: formValues.dokumen_plagiarisme_metadata,
-              dokumen_draft: formValues.dokumen_draft_metadata,
-              status: 'registered',
-              approve_pembimbing_1: false,
-              approve_pembimbing_2: false,
-              catatan: formValues.catatan || null
-            }
-          ])
+        .from('sempros')
+        .insert([
+          {
+            user_id: user.id,
+            pengajuan_ta_id: formValues.pengajuan_ta_id,
+            periode_id: periodeData.id,
+            tanggal: new Date().toISOString(), // Changed from tanggal_daftar
+            // Use the correct field names and store just the URL or the format expected by the DB
+            form_ta_012: formValues.dokumen_ta012_metadata.fileUrl,
+            bukti_plagiasi: formValues.dokumen_plagiarisme_metadata.fileUrl,
+            proposal_ta: formValues.dokumen_draft_metadata.fileUrl,
+            status: 'registered',
+            approve_pembimbing_1: false,
+            approve_pembimbing_2: false
+            // Remove catatan since it doesn't exist in the database
+          }
+        ])
+        
           .select();
         
         if (error) {

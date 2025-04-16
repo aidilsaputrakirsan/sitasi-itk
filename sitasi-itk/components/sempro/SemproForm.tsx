@@ -251,29 +251,42 @@ export function SemproForm({
     }
   };
 
-  const onFormSubmit = (data: SemproFormValues) => {
-    if (isUploading) {
-      setUploadError('Mohon tunggu hingga semua file selesai diupload');
-      return;
+  // In components/sempro/SemproForm.tsx - add better error handling in onFormSubmit
+  const onFormSubmit = async (data: SemproFormValues) => {
+    try {
+      console.log("Starting form submission with data:", data);
+      
+      if (isUploading) {
+        setUploadError('Mohon tunggu hingga semua file selesai diupload');
+        return;
+      }
+      
+      // Required file validation - periksa metadata, bukan file
+      if (!dokumenTA012Metadata || !dokumenPlagiarismeMetadata || !dokumenDraftMetadata) {
+        setUploadError('Semua dokumen harus diupload');
+        return;
+      }
+      
+      // Reset upload error
+      setUploadError(null);
+      
+      // Pastikan metadata digunakan untuk pengiriman data
+      data.dokumen_ta012_metadata = dokumenTA012Metadata;
+      data.dokumen_plagiarisme_metadata = dokumenPlagiarismeMetadata;
+      data.dokumen_draft_metadata = dokumenDraftMetadata;
+      
+      console.log("Submitting form with metadata:", {
+        ta012: dokumenTA012Metadata.fileUrl,
+        plagiarisme: dokumenPlagiarismeMetadata.fileUrl,
+        draft: dokumenDraftMetadata.fileUrl
+      });
+      
+      await onSubmit(data);
+      console.log("Form submission completed successfully!");
+    } catch (error) {
+      console.error("Error in form submission:", error);
+      setUploadError(`Gagal mendaftar: ${error instanceof Error ? error.message : "Unknown error"}`);
     }
-    
-    // Required file validation - periksa metadata, bukan file
-    if (!dokumenTA012Metadata || !dokumenPlagiarismeMetadata || !dokumenDraftMetadata) {
-      setUploadError('Semua dokumen harus diupload');
-      return;
-    }
-    
-    // Reset upload error
-    setUploadError(null);
-    
-    // Pastikan metadata digunakan untuk pengiriman data
-    // TypeScript tidak akan error karena kita menggunakan properti metadata yang sudah terdefinisi
-    data.dokumen_ta012_metadata = dokumenTA012Metadata;
-    data.dokumen_plagiarisme_metadata = dokumenPlagiarismeMetadata;
-    data.dokumen_draft_metadata = dokumenDraftMetadata;
-    
-    console.log("Submitting form data dengan metadata file:", data);
-    onSubmit(data);
   };
 
   return (
