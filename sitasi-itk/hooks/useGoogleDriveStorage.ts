@@ -5,9 +5,6 @@ import { useState, useCallback } from 'react';
 import { FileMetadata } from '@/types/sempro';
 import { useToast } from './use-toast';
 
-// Ganti URL ini dengan URL deployment Google Apps Script Anda
-const GAS_ENDPOINT = process.env.NEXT_PUBLIC_GAS_ENDPOINT || '';
-
 interface UploadOptions {
   description?: string;
   studentId?: string;
@@ -37,17 +34,23 @@ export function useGoogleDriveStorage() {
       try {
         console.log("Memulai upload file:", file.name, "Ukuran:", file.size);
         
-        // Buat FormData
-        const formData = new FormData();
-        formData.append('file', file);
+        // Ambil GAS endpoint dari env variable
+        const gasEndpoint = process.env.NEXT_PUBLIC_GAS_ENDPOINT;
         
-        // Tambahkan metadata tambahan jika ada
-        if (options?.studentId) formData.append('studentId', options.studentId);
-        if (options?.studentName) formData.append('studentName', options.studentName);
-        if (options?.description) formData.append('description', options.description);
-
-        // Simulasi progress (karena GAS tidak mendukung progress realtime)
-        let progressInterval = setInterval(() => {
+        if (!gasEndpoint) {
+          throw new Error("GAS endpoint tidak dikonfigurasi");
+        }
+        
+        console.log("Menggunakan GAS endpoint:", gasEndpoint);
+        
+        // Baca file sebagai base64
+        const fileBase64 = await readFileAsBase64(file);
+        if (!fileBase64) {
+          throw new Error("Gagal membaca file sebagai base64");
+        }
+        
+        // Simulasi progress untuk UX yang lebih baik
+        const progressInterval = setInterval(() => {
           setUploadProgress((prev) => {
             const newProgress = Math.min(prev + 5, 90);
             options?.onProgress?.(newProgress);
@@ -55,23 +58,42 @@ export function useGoogleDriveStorage() {
           });
         }, 300);
 
-        // Kirim request ke Google Apps Script
-        const response = await fetch(GAS_ENDPOINT, {
+        // Siapkan data untuk dikirim sebagai JSON
+        const requestData = {
+          fileName: file.name,
+          fileType: file.type,
+          fileData: fileBase64,
+          description: options?.description || `Uploaded by ${options?.studentName || 'user'}`
+        };
+
+        console.log("Mengirim request ke GAS...");
+        
+        // Kirim request dengan JSON
+        const response = await fetch(gasEndpoint, {
           method: 'POST',
-          body: formData,
-          mode: 'cors',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(requestData),
         });
 
         clearInterval(progressInterval);
-
-        if (!response.ok) {
-          throw new Error(`Upload gagal: ${response.status}`);
+        
+        const responseText = await response.text();
+        console.log("Response raw:", responseText);
+        
+        let result;
+        try {
+          result = JSON.parse(responseText);
+        } catch (e) {
+          console.error("Failed to parse response as JSON:", e);
+          throw new Error("Respons dari server bukan format JSON yang valid");
         }
-
-        const result = await response.json();
+        
+        console.log("Response parsed:", result);
         
         if (!result.success) {
-          throw new Error(result.error || 'Upload gagal');
+          throw new Error(result.error || 'Upload gagal tanpa pesan error');
         }
 
         // Set progress 100%
@@ -86,12 +108,13 @@ export function useGoogleDriveStorage() {
         // Buat metadata lengkap
         const metadata: FileMetadata = {
           fileId: result.fileId,
-          fileUrl: result.fileUrl,
+          fileUrl: result.downloadUrl || result.fileUrl,
           fileName: file.name,
           fileType: file.type,
           uploadedAt: result.uploadedAt || new Date().toISOString()
         };
 
+        console.log("File metadata:", metadata);
         return metadata;
       } catch (error) {
         console.error('Error uploading file:', error);
@@ -108,12 +131,29 @@ export function useGoogleDriveStorage() {
     [toast]
   );
 
+  // Fungsi untuk membaca file sebagai base64
+  const readFileAsBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => {
+        // Format data URL: "data:image/png;base64,iVBORw0KG..."
+        // Kita perlu mengambil bagian setelah koma
+        const base64String = reader.result as string;
+        const base64Content = base64String.split(',')[1];
+        resolve(base64Content);
+      };
+      reader.onerror = () => {
+        reject(new Error("Gagal membaca file"));
+      };
+    });
+  };
+
   const deleteFile = useCallback(
     async (fileId: string): Promise<boolean> => {
-      // Kita tidak implementasikan delete untuk versi sederhana ini
       toast({
         title: "Info",
-        description: "Penghapusan file dari Google Drive tidak diimplementasikan dalam versi ini.",
+        description: "Fitur hapus file belum diimplementasikan.",
       });
       return false;
     },
