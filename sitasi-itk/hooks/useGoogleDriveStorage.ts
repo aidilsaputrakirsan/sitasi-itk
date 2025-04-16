@@ -58,39 +58,17 @@ export function useGoogleDriveStorage() {
           });
         }, 300);
 
-        // Siapkan data untuk dikirim sebagai JSON
-        const requestData = {
+        console.log("Mengirim request ke GAS...");
+        
+        // Menggunakan XMLHttpRequest untuk mengatasi masalah CORS
+        const result = await uploadWithXHR(gasEndpoint, {
           fileName: file.name,
           fileType: file.type,
           fileData: fileBase64,
           description: options?.description || `Uploaded by ${options?.studentName || 'user'}`
-        };
-
-        console.log("Mengirim request ke GAS...");
-        
-        // Kirim request dengan JSON
-        const response = await fetch(gasEndpoint, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(requestData),
         });
 
         clearInterval(progressInterval);
-        
-        const responseText = await response.text();
-        console.log("Response raw:", responseText);
-        
-        let result;
-        try {
-          result = JSON.parse(responseText);
-        } catch (e) {
-          console.error("Failed to parse response as JSON:", e);
-          throw new Error("Respons dari server bukan format JSON yang valid");
-        }
-        
-        console.log("Response parsed:", result);
         
         if (!result.success) {
           throw new Error(result.error || 'Upload gagal tanpa pesan error');
@@ -130,6 +108,35 @@ export function useGoogleDriveStorage() {
     },
     [toast]
   );
+
+  // Fungsi untuk upload dengan XHR untuk mengatasi CORS
+  const uploadWithXHR = (url: string, data: any): Promise<any> => {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', url, true);
+      xhr.setRequestHeader('Content-Type', 'application/json');
+      
+      xhr.onload = function() {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            const result = JSON.parse(xhr.responseText);
+            resolve(result);
+          } catch (e) {
+            reject(new Error("Invalid JSON response"));
+          }
+        } else {
+          reject(new Error(`HTTP error ${xhr.status}`));
+        }
+      };
+      
+      xhr.onerror = function() {
+        console.error("XHR Error:", xhr.statusText);
+        reject(new Error("Network error occurred"));
+      };
+      
+      xhr.send(JSON.stringify(data));
+    });
+  };
 
   // Fungsi untuk membaca file sebagai base64
   const readFileAsBase64 = (file: File): Promise<string> => {
