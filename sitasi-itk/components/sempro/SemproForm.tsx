@@ -288,20 +288,25 @@ export function SemproForm({
       data.dokumen_plagiarisme_metadata = dokumenPlagiarismeMetadata;
       data.dokumen_draft_metadata = dokumenDraftMetadata;
       
-      await onSubmit(data);
-      setDebugInfo("Pendaftaran berhasil!");
+      // Tambahkan timeout untuk memberi waktu UI update
+      setTimeout(async () => {
+        try {
+          setDebugInfo("Mengirim data ke server...");
+          await onSubmit(data);
+          setDebugInfo("Pendaftaran berhasil!");
+        } catch (submitError) {
+          console.error("Error during submission:", submitError);
+          setDebugInfo(`Error submit: ${submitError instanceof Error ? submitError.message : JSON.stringify(submitError)}`);
+          setUploadError(`Gagal mendaftar: ${submitError instanceof Error ? submitError.message : "Unknown error"}`);
+        }
+      }, 100);
+      
     } catch (error) {
-      console.error("Error saat pendaftaran:", error);
-      setDebugInfo(`Error: ${error instanceof Error ? error.message : "Unknown error"}`);
+      console.error("Error dalam persiapan pendaftaran:", error);
+      setDebugInfo(`Error: ${error instanceof Error ? error.message : JSON.stringify(error)}`);
       setUploadError(`Gagal mendaftar: ${error instanceof Error ? error.message : "Unknown error"}`);
     }
   };
-
-  {debugInfo && (
-    <div className="mt-4 p-3 bg-gray-100 border rounded text-xs">
-      <p className="font-mono">{debugInfo}</p>
-    </div>
-  )}
 
   return (
     <Card className="w-full">
@@ -424,6 +429,13 @@ export function SemproForm({
               rows={3}
             />
           </div>
+
+           {/* Debug Information */}
+            {debugInfo && (
+              <div className="mt-4 p-3 bg-gray-100 border rounded text-xs">
+                <p className="font-mono">{debugInfo}</p>
+              </div>
+            )}
         </CardContent>
         <CardFooter className="flex justify-between">
           <Button variant="outline" type="button" onClick={() => window.history.back()}>

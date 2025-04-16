@@ -20,6 +20,7 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { UserRole } from '@/types/auth';
 import { useToast } from './use-toast';
+import { useRouter } from 'next/navigation';
 //import { useFirebaseStorage } from '@/hooks/useFirebaseStorage';
 import { useGoogleDriveStorage } from '@/hooks/useGoogleDriveStorage';
 
@@ -555,10 +556,13 @@ export function useStudentPengajuanTAforSempro() {
 // Perbaikan fungsi useCreateSempro di hooks/useSempro.ts untuk menggunakan properti metadata
 
 // Create a new sempro registration
+// Perbaikan untuk useCreateSempro di hooks/useSempro.ts
+
 export function useCreateSempro() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { user } = useAuth();
+  const router = useRouter(); // Tambahkan ini
   
   return useMutation({
     mutationFn: async (formValues: SemproFormValues) => {
@@ -567,7 +571,14 @@ export function useCreateSempro() {
       }
       
       try {
-        console.log("Creating new sempro with data:", formValues);
+        console.log("====== MEMULAI PROSES PENDAFTARAN SEMPRO ======");
+        console.log("User:", user.id);
+        console.log("FormValues:", {
+          pengajuan_ta_id: formValues.pengajuan_ta_id,
+          hasTA012Metadata: !!formValues.dokumen_ta012_metadata,
+          hasPlagiarismMetadata: !!formValues.dokumen_plagiarisme_metadata,
+          hasDraftMetadata: !!formValues.dokumen_draft_metadata
+        });
         
         // Verify required fields
         if (!formValues.pengajuan_ta_id) {
@@ -578,109 +589,141 @@ export function useCreateSempro() {
         if (!formValues.dokumen_ta012_metadata || 
             !formValues.dokumen_plagiarisme_metadata || 
             !formValues.dokumen_draft_metadata) {
+          console.error("Metadata tidak lengkap:", {
+            ta012: !!formValues.dokumen_ta012_metadata,
+            plagiarisme: !!formValues.dokumen_plagiarisme_metadata,
+            draft: !!formValues.dokumen_draft_metadata
+          });
           throw new Error('Metadata file tidak lengkap');
         }
         
+        // Tambahkan logging untuk debugging
+        console.log("Metadata file URL:"); 
+        console.log("- TA012:", formValues.dokumen_ta012_metadata.fileUrl);
+        console.log("- Plagiarisme:", formValues.dokumen_plagiarisme_metadata.fileUrl);
+        console.log("- Draft:", formValues.dokumen_draft_metadata.fileUrl);
+        
         // Check if user has registered in an active period
+        console.log("Mencari periode aktif...");
         const { data: periodeData, error: periodeError } = await supabase
           .from('periodes')
-          .select('id')
+          .select('id, nama_periode')
           .eq('is_active', true)
           .order('created_at', { ascending: false })
           .limit(1)
           .single();
           
-        if (periodeError || !periodeData) {
+        if (periodeError) {
+          console.error("Error fetching active periode:", periodeError);
           throw new Error('Tidak ada periode pendaftaran sempro yang aktif saat ini');
         }
         
-        // Tidak perlu upload file lagi karena sudah menggunakan metadata yang ada
-        console.log("Menggunakan metadata file yang sudah diupload sebelumnya");
-        
-        // Create the sempro record with file metadata
-        // Create the sempro record with file metadata
-        const { data, error } = await supabase
-          .from('sempros')
-          .insert([
-            {
-              user_id: user.id,
-              pengajuan_ta_id: formValues.pengajuan_ta_id,
-              periode_id: periodeData.id,
-              tanggal: new Date().toISOString(), // Gunakan 'tanggal' bukan 'tanggal_daftar'
-              // Simpan URL file, bukan metadata lengkap:
-              form_ta_012: formValues.dokumen_ta012_metadata.fileUrl, // Gunakan form_ta_012 bukan dokumen_ta012
-              bukti_plagiasi: formValues.dokumen_plagiarisme_metadata.fileUrl, // Gunakan bukti_plagiasi bukan dokumen_plagiarisme
-              proposal_ta: formValues.dokumen_draft_metadata.fileUrl, // Gunakan proposal_ta bukan dokumen_draft
-              status: 'registered'
-              // Hapus field catatan karena tidak ada di database Anda
-            }
-          ])
-          .select();
-        
-        if (error) {
-          console.error('Error creating sempro record:', error);
-          throw error;
+        if (!periodeData) {
+          throw new Error('Tidak ada periode pendaftaran sempro yang aktif saat ini');
         }
         
-        if (!data || data.length === 0) {
-          throw new Error('Failed to create sempro record: No data returned');
+        console.log("Periode aktif ditemukan:", periodeData.id, periodeData.nama_periode);
+        
+        // Pastikan URL file ada
+        const ta012Url = formValues.dokumen_ta012_metadata?.fileUrl || "";
+        const plagiarismeUrl = formValues.dokumen_plagiarisme_metadata?.fileUrl || "";
+        const draftUrl = formValues.dokumen_draft_metadata?.fileUrl || "";
+        
+        if (!ta012Url || !plagiarismeUrl || !draftUrl) {
+          console.error("URL file tidak lengkap:", {ta012Url, plagiarismeUrl, draftUrl});
+          throw new Error('URL file tidak lengkap');
         }
         
-        // Create riwayat record
-        await supabase
-          .from('riwayat_pendaftaran_sempros')
-          .insert([
-            {
+        // Create the sempro record with file metadata
+        const insertData = {
+          user_id: user.id,
+          pengajuan_ta_id: formValues.pengajuan_ta_id,
+          periode_id: periodeData.id,
+          tanggal: new Date().toISOString(),
+          form_ta_012: ta012Url, 
+          bukti_plagiasi: plagiarismeUrl,
+          proposal_ta: draftUrl,
+          status: 'registered'
+        };
+        
+        console.log("== Data yang akan diinsert ke tabel sempros:", insertData);
+        
+        try {
+          console.log("Memasukkan data ke tabel sempros...");
+          const { data, error } = await supabase
+            .from('sempros')
+            .insert([insertData])
+            .select();
+          
+          console.log("Hasil insert sempros:", { data: data ? "Data tersedia" : "Tidak ada data", 
+                                                  error: error ? error : "Tidak ada error" });
+          
+          if (error) {
+            console.error('Error creating sempro record:', error);
+            throw error;
+          }
+          
+          if (!data || data.length === 0) {
+            throw new Error('Failed to create sempro record: No data returned');
+          }
+          
+          console.log("Sempro berhasil dibuat! ID:", data[0].id);
+          
+          // Create riwayat record
+          try {
+            console.log("Membuat riwayat pendaftaran...");
+            const riwayatData = {
               sempro_id: data[0].id,
               pengajuan_ta_id: formValues.pengajuan_ta_id,
               user_id: user.id,
               status: 'registered',
               keterangan: 'Pendaftaran seminar proposal'
+            };
+            
+            console.log("Data riwayat:", riwayatData);
+            
+            const { data: riwayatResult, error: riwayatError } = await supabase
+              .from('riwayat_pendaftaran_sempros')
+              .insert([riwayatData])
+              .select();
+            
+            if (riwayatError) {
+              console.error("Error creating riwayat record:", riwayatError);
+            } else {
+              console.log("Riwayat berhasil dibuat!");
             }
-          ]);
-        
-        // Create notification for admin
-        const adminRoles = ['tendik', 'koorpro'];
-        
-        // Get admin users
-        const { data: adminUsers, error: adminError } = await supabase
-          .from('profiles')
-          .select('id')
-          .contains('roles', adminRoles);
-          
-        if (!adminError && adminUsers) {
-          // Create notifications for each admin
-          const notifications = adminUsers.map(admin => ({
-            from_user: user.id,
-            to_user: admin.id,
-            judul: 'Pendaftaran Seminar Proposal Baru',
-            pesan: 'Seorang mahasiswa telah mendaftar seminar proposal dan menunggu verifikasi',
-            is_read: false
-          }));
-          
-          // Insert notifications
-          if (notifications.length > 0) {
-            await supabase
-              .from('notifikasis')
-              .insert(notifications);
+          } catch (riwayatError) {
+            console.error("Error creating riwayat record:", riwayatError);
+            // Tidak throw error karena riwayat bukan inti proses
           }
+          
+          console.log("====== PROSES PENDAFTARAN SEMPRO SELESAI ======");
+          return data[0];
+        } catch (insertError) {
+          console.error("ERROR SAAT INSERT KE SEMPROS:", insertError);
+          throw insertError;
         }
-        
-        return data[0];
       } catch (error) {
         console.error('Error in sempro creation process:', error);
         throw error instanceof Error ? error : new Error(String(error));
       }
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      console.log("Mutation success! Data:", data);
       queryClient.invalidateQueries({ queryKey: ['sempros'] });
       
       toast({
         title: "Pendaftaran Berhasil",
         description: "Pendaftaran seminar proposal berhasil. Menunggu verifikasi admin.",
       });
+      
+      // Tambahkan redirect ke halaman daftar sempro
+      setTimeout(() => {
+        router.push('/dashboard/sempro');
+      }, 1500);
     },
     onError: (error: Error) => {
+      console.error("Mutation error:", error);
       toast({
         variant: "destructive",
         title: "Gagal Mendaftar",
