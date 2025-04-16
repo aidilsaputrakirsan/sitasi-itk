@@ -116,6 +116,9 @@ export function useGoogleDriveStorage() {
       xhr.open('POST', url, true);
       xhr.setRequestHeader('Content-Type', 'application/json');
       
+      // Add withCredentials: false to explicitly tell the browser this is a CORS request
+      xhr.withCredentials = false;
+      
       xhr.onload = function() {
         if (xhr.status >= 200 && xhr.status < 300) {
           try {
@@ -125,12 +128,18 @@ export function useGoogleDriveStorage() {
             reject(new Error("Invalid JSON response"));
           }
         } else {
-          reject(new Error(`HTTP error ${xhr.status}`));
+          reject(new Error(`HTTP error ${xhr.status}: ${xhr.statusText}`));
         }
       };
       
       xhr.onerror = function() {
         console.error("XHR Error:", xhr.statusText);
+        // Log more detailed error information
+        console.error("Error details:", {
+          status: xhr.status,
+          readyState: xhr.readyState,
+          responseText: xhr.responseText || "No response text"
+        });
         reject(new Error("Network error occurred"));
       };
       
