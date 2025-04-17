@@ -806,61 +806,74 @@ export function useCreateSempro() {
 }
 
 // Update sempro status (for admin)
-// Update sempro status (for admin)
 export function useUpdateSemproStatus() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { user } = useAuth();
   
   return useMutation({
-    mutationFn: async ({ 
-      id, 
-      status, 
-      catatan,
-      mahasiswaId
-    }: { 
-      id: string, 
-      status: StatusSempro,
-      catatan?: string,
-      mahasiswaId: string
+    mutationFn: async ({ id, status, catatan, mahasiswaId }: { 
+      id: string; 
+      status: StatusSempro; 
+      catatan?: string; 
+      mahasiswaId: string; 
     }) => {
-      if (!user) {
-        throw new Error('User not authenticated');
-      }
+      if (!user) throw new Error('User not authenticated');
       
       try {
-        console.log(`Updating sempro status to ${status} for ID: ${id}`);
-
-        // Pemetaan status frontend ke status database
+        console.log(`======= PROSES UPDATE STATUS SEMPRO =======`);
+        console.log(`ID: ${id} | Status: ${status} | MahasiswaID: ${mahasiswaId}`);
+        
+        // 1. Ambil data sempro terlebih dahulu untuk mendapatkan pengajuan_ta_id
+        const { data: semproData, error: semproError } = await supabase
+          .from('sempros')
+          .select('id, pengajuan_ta_id, status')
+          .eq('id', id)
+          .single();
+        
+        if (semproError) {
+          console.error('Error mengambil data sempro:', semproError);
+          throw new Error(`Gagal mengambil data sempro: ${semproError.message}`);
+        }
+        
+        if (!semproData) {
+          throw new Error('Data sempro tidak ditemukan');
+        }
+        
+        console.log('Data sempro yang akan diupdate:', semproData);
+        
+        // 2. Pemetaan status frontend ke database
         let dbStatus;
         switch (status) {
-          case 'verified': // Nilai di frontend yang tidak ada di database
-            dbStatus = 'evaluated'; // Nilai yang benar di database
+          case 'verified':
+            dbStatus = 'evaluated';
             break;
-          case 'rejected': // Nilai di frontend yang tidak ada di database
-            dbStatus = 'registered';
+          case 'rejected':
+            dbStatus = 'registered'; // Tetap 'registered' di database
             catatan = `DITOLAK: ${catatan || 'Dokumen tidak memenuhi syarat'}`;
             break;
           default:
-            dbStatus = status; // Nilai lain yang sama di frontend dan database
+            dbStatus = status;
         }
         
-        // Update dengan status yang sudah dipetakan
-        const { data, error } = await supabase
+        // 3. Update status di database
+        const { data: updateData, error: updateError } = await supabase
           .from('sempros')
           .update({
-            status: dbStatus, // PERBAIKAN: Gunakan dbStatus yang sudah dipetakan
+            status: dbStatus,
             updated_at: new Date().toISOString()
           })
           .eq('id', id)
-          .select('id, user_id, pengajuan_ta_id, status'); // Gunakan select sederhana untuk menghindari error join
+          .select('id');
           
-        if (error) {
-          console.error('Error updating sempro status:', error);
-          throw error;
+        if (updateError) {
+          console.error('Error updating sempro status:', updateError);
+          throw new Error(`Gagal mengubah status: ${updateError.message}`);
         }
         
-        // Add riwayat record with catatan
+        console.log('Status sempro berhasil diupdate');
+        
+        // 4. Buat keterangan sesuai status
         let keterangan = '';
         switch (status) {
           case 'verified':
@@ -882,46 +895,73 @@ export function useUpdateSemproStatus() {
             keterangan = `Status berubah menjadi ${status}`;
         }
         
-        // Tambahkan logging untuk debugging
         console.log("Menambahkan riwayat dengan keterangan:", keterangan);
         
-        await supabase
-          .from('riwayat_pendaftaran_sempros')
-          .insert([
-            {
-              sempro_id: id,
-              pengajuan_ta_id: data?.[0]?.pengajuan_ta_id,
-              user_id: user.id,
-              keterangan,
-              status
-            }
-          ]);
+        // 5. Tambahkan riwayat pendaftaran - PASTIKAN SEMUA FIELD TERISI
+        const riwayatData = {
+          sempro_id: id,
+          pengajuan_ta_id: semproData.pengajuan_ta_id, // Gunakan pengajuan_ta_id dari data sempro
+          user_id: user.id,
+          keterangan: keterangan,
+          status: status
+        };
         
-        // Send notification to student
-        await supabase
-          .from('notifikasis')
-          .insert([
-            {
+        console.log("Data riwayat yang akan diinsert:", riwayatData);
+        
+        const { data: riwayatResult, error: riwayatError } = await supabase
+          .from('riwayat_pendaftaran_sempros')
+          .insert([riwayatData])
+          .select();
+          
+        if (riwayatError) {
+          console.error('ERROR SAAT INSERT RIWAYAT:', riwayatError);
+          // Tidak throw error karena status sudah berhasil diubah
+          // Tapi berikan pesan warning
+          toast({
+            variant: "destructive",
+            title: "Status diubah, tapi riwayat gagal direkam",
+            description: riwayatError.message,
+          });
+        } else {
+          console.log('Riwayat berhasil ditambahkan:', riwayatResult);
+        }
+        
+        // 6. Kirim notifikasi
+        try {
+          const { error: notifError } = await supabase
+            .from('notifikasis')
+            .insert([{
               from_user: user.id,
               to_user: mahasiswaId,
               judul: `Status Sempro: ${status}`,
               pesan: keterangan,
               is_read: false
-            }
-          ]);
+            }]);
+            
+          if (notifError) {
+            console.error('Error mengirim notifikasi:', notifError);
+          } else {
+            console.log('Notifikasi berhasil dikirim');
+          }
+        } catch (notifError) {
+          console.error('Error saat mengirim notifikasi:', notifError);
+          // Tidak perlu throw error di sini
+        }
         
-        return data?.[0];
+        console.log(`======= PROSES UPDATE STATUS SEMPRO SELESAI =======`);
+        return { id, status, updated: true };
       } catch (error) {
-        console.error('Error in update sempro status process:', error);
+        console.error('Error dalam proses update status sempro:', error);
         throw error instanceof Error ? error : new Error(String(error));
       }
     },
     onSuccess: () => {
-      // Invalidasi lebih lengkap untuk memastikan data direfresh
+      // Invalidasi semua query terkait sempro untuk memperbarui UI
       queryClient.invalidateQueries({ queryKey: ['sempros'] });
       queryClient.invalidateQueries({ queryKey: ['sempro'] });
       queryClient.invalidateQueries({ queryKey: ['sempros', 'all'] });
       queryClient.invalidateQueries({ queryKey: ['sempros', 'student'] });
+      queryClient.invalidateQueries({ queryKey: ['riwayat-sempro'] });
       
       toast({
         title: "Status Diperbarui",
