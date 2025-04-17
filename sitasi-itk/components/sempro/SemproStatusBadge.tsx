@@ -18,6 +18,7 @@ export function SemproStatusBadge({ status, className = "" }: SemproStatusBadgeP
       label = "Terdaftar";
       break;
     case "verified":
+    case "evaluated": // Menangani kedua nilai - 'verified' di frontend dan 'evaluated' di DB
       bgColor = "bg-purple-100";
       textColor = "text-purple-800";
       label = "Terverifikasi";
@@ -32,17 +33,12 @@ export function SemproStatusBadge({ status, className = "" }: SemproStatusBadgeP
       textColor = "text-green-800";
       label = "Selesai";
       break;
-    case "evaluated": // Menggunakan nilai database yang benar
-      bgColor = "bg-purple-100";
-      textColor = "text-purple-800";
-      label = "Terverifikasi"; // Label tetap sama untuk konsistensi UI
-      break;
     case "revision_required":
       bgColor = "bg-amber-100";
       textColor = "text-amber-800";
       label = "Perlu Revisi";
       break;
-    case "rejected":
+    case "rejected": // Nilai khusus frontend untuk pendaftaran ditolak
       bgColor = "bg-red-100";
       textColor = "text-red-800";
       label = "Ditolak";

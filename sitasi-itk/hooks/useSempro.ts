@@ -56,7 +56,7 @@ export function useAllSempros() {
           throw error;
         }
         
-        // Enhance data with mahasiswa details
+        // Enhance data with mahasiswa details and check for rejected status
         const enhancedData = await Promise.all(data.map(async (sempro) => {
           try {
             // Get mahasiswa data
@@ -65,15 +65,33 @@ export function useAllSempros() {
               .select('nama, nim, email, nomor_telepon')
               .eq('user_id', sempro.user_id)
               .single();
-              
-            if (mahasiswaError) {
-              console.error("Error fetching mahasiswa details:", mahasiswaError);
-              return sempro;
+            
+            // Check if this sempro was rejected by looking at the riwayat
+            const { data: riwayatData, error: riwayatError } = await supabase
+              .from('riwayat_pendaftaran_sempros')
+              .select('keterangan')
+              .eq('sempro_id', sempro.id)
+              .ilike('keterangan', 'DITOLAK%')
+              .order('created_at', { ascending: false })
+              .limit(1);
+            
+            // If there's a rejection record in riwayat, mark the sempro as rejected for frontend
+            let statusForFrontend = sempro.status;
+            
+            // Pemetaan status database ke frontend
+            if (statusForFrontend === 'evaluated') {
+              statusForFrontend = 'verified';
+            }
+            
+            // Cek apakah ada catatan penolakan
+            if (!riwayatError && riwayatData && riwayatData.length > 0) {
+              statusForFrontend = 'rejected';
             }
             
             return {
               ...sempro,
-              mahasiswa: mahasiswaData
+              status: statusForFrontend, // Gunakan status yang sudah dipetakan untuk frontend
+              mahasiswa: mahasiswaError ? null : mahasiswaData
             };
           } catch (err) {
             console.error(`Error enhancing sempro ID ${sempro.id}:`, err);
@@ -119,8 +137,43 @@ export function useStudentSempros() {
           throw error;
         }
         
-        console.log(`Found ${data.length} sempros for student`);
-        return data as Sempro[];
+        // Enhance data with status mapping and rejection checking
+        const enhancedData = await Promise.all(data.map(async (sempro) => {
+          try {
+            // Check if this sempro was rejected by looking at the riwayat
+            const { data: riwayatData, error: riwayatError } = await supabase
+              .from('riwayat_pendaftaran_sempros')
+              .select('keterangan')
+              .eq('sempro_id', sempro.id)
+              .ilike('keterangan', 'DITOLAK%')
+              .order('created_at', { ascending: false })
+              .limit(1);
+            
+            // If there's a rejection record in riwayat, mark the sempro as rejected for frontend
+            let statusForFrontend = sempro.status;
+            
+            // Pemetaan status database ke frontend
+            if (statusForFrontend === 'evaluated') {
+              statusForFrontend = 'verified';
+            }
+            
+            // Cek apakah ada catatan penolakan
+            if (!riwayatError && riwayatData && riwayatData.length > 0) {
+              statusForFrontend = 'rejected';
+            }
+            
+            return {
+              ...sempro,
+              status: statusForFrontend
+            };
+          } catch (err) {
+            console.error(`Error enhancing sempro ID ${sempro.id}:`, err);
+            return sempro;
+          }
+        }));
+        
+        console.log(`Found ${enhancedData.length} sempros for student`);
+        return enhancedData as Sempro[];
       } catch (error) {
         console.error("Error in useStudentSempros:", error);
         return [];
@@ -259,7 +312,7 @@ export function useSemproDetail(id: string) {
           throw error;
         }
         
-        // Enhance with mahasiswa data
+        // Enhance with mahasiswa data and status correction
         try {
           // Get mahasiswa data
           const { data: mahasiswaData, error: mahasiswaError } = await supabase
@@ -267,13 +320,32 @@ export function useSemproDetail(id: string) {
             .select('nama, nim, email, nomor_telepon')
             .eq('user_id', data.user_id)
             .single();
-            
-          if (mahasiswaError) {
-            console.error("Error fetching mahasiswa details:", mahasiswaError);
+          
+          // Check if this sempro was rejected by looking at the riwayat
+          const { data: riwayatData, error: riwayatError } = await supabase
+            .from('riwayat_pendaftaran_sempros')
+            .select('keterangan')
+            .eq('sempro_id', data.id)
+            .ilike('keterangan', 'DITOLAK%')
+            .order('created_at', { ascending: false })
+            .limit(1);
+          
+          // If there's a rejection record in riwayat, mark the sempro as rejected for frontend
+          let statusForFrontend = data.status;
+          
+          // Pemetaan status database ke frontend
+          if (statusForFrontend === 'evaluated') {
+            statusForFrontend = 'verified';
+          }
+          
+          // Cek apakah ada catatan penolakan
+          if (!riwayatError && riwayatData && riwayatData.length > 0) {
+            statusForFrontend = 'rejected';
           }
           
           const enhancedData = {
             ...data,
+            status: statusForFrontend,
             mahasiswa: mahasiswaError ? null : mahasiswaData
           };
           
@@ -734,6 +806,7 @@ export function useCreateSempro() {
 }
 
 // Update sempro status (for admin)
+// Update sempro status (for admin)
 export function useUpdateSemproStatus() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -765,7 +838,6 @@ export function useUpdateSemproStatus() {
             dbStatus = 'evaluated'; // Nilai yang benar di database
             break;
           case 'rejected': // Nilai di frontend yang tidak ada di database
-            // Karena 'rejected' tidak ada, kita gunakan status lain atau tambahkan penanganan khusus
             dbStatus = 'registered';
             catatan = `DITOLAK: ${catatan || 'Dokumen tidak memenuhi syarat'}`;
             break;
@@ -781,7 +853,7 @@ export function useUpdateSemproStatus() {
             updated_at: new Date().toISOString()
           })
           .eq('id', id)
-          .select();
+          .select('id, user_id, pengajuan_ta_id, status'); // Gunakan select sederhana untuk menghindari error join
           
         if (error) {
           console.error('Error updating sempro status:', error);
@@ -845,8 +917,11 @@ export function useUpdateSemproStatus() {
       }
     },
     onSuccess: () => {
+      // Invalidasi lebih lengkap untuk memastikan data direfresh
       queryClient.invalidateQueries({ queryKey: ['sempros'] });
       queryClient.invalidateQueries({ queryKey: ['sempro'] });
+      queryClient.invalidateQueries({ queryKey: ['sempros', 'all'] });
+      queryClient.invalidateQueries({ queryKey: ['sempros', 'student'] });
       
       toast({
         title: "Status Diperbarui",

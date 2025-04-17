@@ -1,267 +1,328 @@
 'use client';
 
-import { useEffect } from 'react';
-import { useAuth } from '../../contexts/AuthContext';
-import { DataCard } from '../../components/DataCard';
-import { NotificationCard } from '../../components/NotificationCard';
-import { useNotifications, useMarkNotificationAsRead } from '../../hooks/useNotifications';
+import { useState, useEffect } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
+import { SemproList } from '@/components/sempro/SemproList';
+import { useRoleBasedSempros, useActivePeriodeSempros } from '@/hooks/useSempro';
+import { UserRole } from '@/types/auth';
+import { Button } from '@/components/ui/button';
 import Link from 'next/link';
+import { PlusCircle, Calendar, ClipboardList } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Sempro, StatusSempro } from '@/types/sempro';
 
-// Komponen Icons
-const Icons = {
-  Proposal: () => (
-    <svg
-      className="h-6 w-6 text-blue-600"
-      xmlns="http://www.w3.org/2000/svg"
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-      />
-    </svg>
-  ),
-  Consultation: () => (
-    <svg
-      className="h-6 w-6 text-blue-600"
-      xmlns="http://www.w3.org/2000/svg"
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
-      />
-    </svg>
-  ),
-  Seminar: () => (
-    <svg
-      className="h-6 w-6 text-blue-600"
-      xmlns="http://www.w3.org/2000/svg"
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-      />
-    </svg>
-  ),
-  Defense: () => (
-    <svg
-      className="h-6 w-6 text-blue-600"
-      xmlns="http://www.w3.org/2000/svg"
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z"
-      />
-    </svg>
-  ),
-  Catalog: () => (
-    <svg
-      className="h-6 w-6 text-blue-600"
-      xmlns="http://www.w3.org/2000/svg"
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"
-      />
-    </svg>
-  ),
-};
-
-export default function Dashboard() {
+export default function SemproPage() {
   const { user } = useAuth();
-  const { data: notifications, isLoading: notificationsLoading } = useNotifications(user?.id || '');
-  const { mutate: markAsRead } = useMarkNotificationAsRead();
-
-  // Data statistik default/contoh
-  const dashboardStats = {
-    pengajuan: 2,
-    bimbingan: 5,
-    sempro: 1,
-    sidang: 0
+  const [userRole, setUserRole] = useState<UserRole>('mahasiswa');
+  const [showDebugInfo, setShowDebugInfo] = useState(false);
+  
+  // Set user role
+  useEffect(() => {
+    if (!user) return;
+    
+    if (user.roles.includes('koorpro')) {
+      setUserRole('koorpro');
+    } else if (user.roles.includes('tendik')) {
+      setUserRole('tendik');
+    } else if (user.roles.includes('dosen')) {
+      setUserRole('dosen');
+    } else {
+      setUserRole('mahasiswa');
+    }
+  }, [user]);
+  
+  // Get sempro data based on role
+  const { data: semproData, isLoading } = useRoleBasedSempros();
+  const { data: activePeriodes, isLoading: isLoadingPeriodes } = useActivePeriodeSempros();
+  
+  // For filtering data by status
+  const isActivePeriodeAvailable = !isLoadingPeriodes && activePeriodes && activePeriodes.length > 0;
+  
+  // For admin view, filter sempros based on their status
+  // Filter for "Terdaftar" - only real registered status without rejected ones
+  const registeredSempros = userRole !== 'dosen' 
+    ? (semproData as Sempro[] || []).filter(s => 
+        s.status === 'registered')
+    : [];
+  
+  // Filter for "Terverifikasi" - both 'verified' (frontend) and 'evaluated' (database)
+  const verifiedSempros = userRole !== 'dosen' 
+    ? (semproData as Sempro[] || []).filter(s => 
+        s.status === 'verified' || s.status === 'evaluated')
+    : [];
+    
+  // Filter for "Terjadwal"
+  const scheduledSempros = userRole !== 'dosen' 
+    ? (semproData as Sempro[] || []).filter(s => s.status === 'scheduled')
+    : [];
+    
+  // Filter for "Selesai"
+  const completedSempros = userRole !== 'dosen' 
+    ? (semproData as Sempro[] || []).filter(s => s.status === 'completed')
+    : [];
+    
+  // Filter for "Revisi"
+  const revisionSempros = userRole !== 'dosen' 
+    ? (semproData as Sempro[] || []).filter(s => s.status === 'revision_required')
+    : [];
+    
+  // Filter for "Ditolak" - sempros marked as 'rejected' in UI 
+  // Catatan: dalam implementasi aktual, status 'rejected' tidak disimpan di database
+  // Penolakan biasanya ditandai dengan catatan DITOLAK dalam riwayat
+  const rejectedSempros = userRole !== 'dosen' 
+    ? (semproData as Sempro[] || []).filter(s => s.status === 'rejected')
+    : [];
+  
+  const toggleDebugInfo = () => {
+    setShowDebugInfo(!showDebugInfo);
   };
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('id-ID', {
-      day: '2-digit',
-      month: 'long',
-      year: 'numeric',
-    });
-  };
-
-  const handleMarkAsRead = (id: string) => {
-    markAsRead(id);
-  };
-
+  
+  // For debugging
+  useEffect(() => {
+    if (semproData) {
+      console.log(`Found ${semproData.length} sempro records for ${userRole}`);
+    }
+  }, [semproData, userRole]);
+  
   return (
     <div>
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center space-y-2 md:space-y-0 mb-6">
-        <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Dashboard</h1>
-          <p className="mt-1 text-sm text-gray-500">
-            Selamat datang, {user?.name}!
-          </p>
-        </div>
-        <div className="flex space-x-2">
-          <select className="rounded-md border-gray-300 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50 text-sm">
-            <option>Periode Aktif</option>
-            <option>Semester Ganjil 2024/2025</option>
-            <option>Semester Genap 2023/2024</option>
-          </select>
-          <button className="bg-blue-600 text-white rounded-md px-3 py-2 text-sm font-medium hover:bg-blue-700">
-            Refresh
-          </button>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-        <DataCard
-          title="Pengajuan TA"
-          value={dashboardStats.pengajuan}
-          icon={<Icons.Proposal />}
-          bgColor="bg-blue-100"
-          linkHref="/dashboard/pengajuan"
-          linkText="Lihat detail"
-        />
-        
-        <DataCard
-          title="Bimbingan"
-          value={dashboardStats.bimbingan}
-          icon={<Icons.Consultation />}
-          bgColor="bg-green-100"
-          linkHref="/dashboard/bimbingan"
-          linkText="Lihat detail"
-        />
-        
-        <DataCard
-          title="Seminar Proposal"
-          value={dashboardStats.sempro}
-          icon={<Icons.Seminar />}
-          bgColor="bg-purple-100"
-          linkHref="/dashboard/sempro"
-          linkText="Lihat detail"
-        />
-        
-        <DataCard
-          title="Sidang Tugas Akhir"
-          value={dashboardStats.sidang}
-          icon={<Icons.Defense />}
-          bgColor="bg-yellow-100"
-          linkHref="/dashboard/sidang"
-          linkText="Lihat detail"
-        />
-      </div>
-
-      {/* Notifikasi */}
-      <div className="mt-8">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-lg leading-6 font-medium text-gray-900">Notifikasi Terbaru</h2>
-          {notifications && notifications.length > 0 && (
-            <Link
-              href="/dashboard/notifications"
-              className="text-sm font-medium text-blue-600 hover:text-blue-500"
-            >
-              Lihat semua
-            </Link>
-          )}
-        </div>
-        
-        <div className="bg-white shadow overflow-hidden sm:rounded-md">
-          <ul className="divide-y divide-gray-200">
-            {notificationsLoading ? (
-              <li className="px-4 py-4 sm:px-6 flex justify-center">
-                <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-blue-500"></div>
-              </li>
-            ) : notifications && notifications.length > 0 ? (
-              notifications.slice(0, 5).map((notification) => (
-                <NotificationCard
-                  key={notification.id}
-                  id={notification.id}
-                  title={notification.judul}
-                  message={notification.pesan}
-                  date={formatDate(notification.created_at)}
-                  isRead={notification.is_read}
-                  onMarkAsRead={handleMarkAsRead}
-                />
-              ))
-            ) : (
-              <li className="px-4 py-4 sm:px-6 text-center text-gray-500">
-                Tidak ada notifikasi
-              </li>
+      {/* Header for mahasiswa */}
+      {userRole === 'mahasiswa' && (
+        <div className="mb-4 flex justify-between items-center">
+          <div>
+            <h1 className="text-2xl font-semibold text-gray-900">Seminar Proposal</h1>
+            {!isLoadingPeriodes && (
+              <p className="text-sm text-gray-500 mt-1">
+                {isActivePeriodeAvailable 
+                  ? `Periode pendaftaran aktif: ${activePeriodes[0].nama_periode}`
+                  : 'Tidak ada periode pendaftaran yang aktif saat ini'}
+              </p>
             )}
-          </ul>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" asChild>
+              <Link href="/dashboard/sempro/jadwal">
+                <Calendar className="h-4 w-4 mr-2" />
+                Jadwal Seminar
+              </Link>
+            </Button>
+            <Button asChild disabled={!isActivePeriodeAvailable}>
+              <Link href="/dashboard/sempro/register">
+                <PlusCircle className="h-4 w-4 mr-2" />
+                Daftar Seminar
+              </Link>
+            </Button>
+          </div>
         </div>
-      </div>
+      )}
       
-      {/* Aksi Cepat */}
-      <div className="mt-8">
-        <h2 className="text-lg leading-6 font-medium text-gray-900 mb-4">Aksi Cepat</h2>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Link 
-            href="/dashboard/pengajuan/create" 
-            className="bg-white overflow-hidden shadow rounded-lg p-6 hover:bg-blue-50 transition-colors"
-          >
-            <div className="flex justify-center items-center">
-              <Icons.Proposal />
-            </div>
-            <h3 className="mt-4 text-center font-medium">Ajukan Proposal TA</h3>
-          </Link>
-          
-          <Link 
-            href="/dashboard/bimbingan/create" 
-            className="bg-white overflow-hidden shadow rounded-lg p-6 hover:bg-green-50 transition-colors"
-          >
-            <div className="flex justify-center items-center">
-              <Icons.Consultation />
-            </div>
-            <h3 className="mt-4 text-center font-medium">Catat Bimbingan</h3>
-          </Link>
-          
-          <Link 
-            href="/dashboard/sempro/register" 
-            className="bg-white overflow-hidden shadow rounded-lg p-6 hover:bg-purple-50 transition-colors"
-          >
-            <div className="flex justify-center items-center">
-              <Icons.Seminar />
-            </div>
-            <h3 className="mt-4 text-center font-medium">Daftar Seminar</h3>
-          </Link>
-          
-          <Link 
-            href="/dashboard/katalog" 
-            className="bg-white overflow-hidden shadow rounded-lg p-6 hover:bg-yellow-50 transition-colors"
-          >
-            <div className="flex justify-center items-center">
-              <Icons.Catalog />
-            </div>
-            <h3 className="mt-4 text-center font-medium">Katalog TA</h3>
-          </Link>
+      {/* Dosen Specific View with Tabs */}
+      {userRole === 'dosen' && (
+        <div className="mb-4 flex justify-between items-center">
+          <div>
+            <h1 className="text-2xl font-semibold text-gray-900">Seminar Proposal</h1>
+            <p className="text-sm text-gray-500 mt-1">
+              Daftar seminar proposal di mana Anda terlibat sebagai penguji
+            </p>
+          </div>
+          <Button variant="outline" asChild>
+            <Link href="/dashboard/sempro/jadwal">
+              <Calendar className="h-4 w-4 mr-2" />
+              Jadwal Seminar
+            </Link>
+          </Button>
         </div>
-      </div>
+      )}
+      
+      {/* Admin View with Tabs */}
+      {(userRole === 'tendik' || userRole === 'koorpro') && (
+        <Tabs defaultValue="registered" className="w-full">
+          <div className="mb-6">
+            <div className="flex justify-between items-center mb-4">
+              <div>
+                <h1 className="text-2xl font-semibold text-gray-900">Seminar Proposal</h1>
+                <p className="mt-1 text-sm text-gray-500">
+                  Kelola pendaftaran dan jadwal seminar proposal
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" asChild>
+                  <Link href="/dashboard/sempro/jadwal">
+                    <Calendar className="h-4 w-4 mr-2" />
+                    Jadwal Seminar
+                  </Link>
+                </Button>
+                <Button variant="outline" asChild>
+                  <Link href="/dashboard/sempro/periode">
+                    <ClipboardList className="h-4 w-4 mr-2" />
+                    Kelola Periode
+                  </Link>
+                </Button>
+              </div>
+            </div>
+            
+            <TabsList className="grid grid-cols-3 md:grid-cols-6 w-full">
+              <TabsTrigger value="registered">
+                Terdaftar ({registeredSempros.length})
+              </TabsTrigger>
+              <TabsTrigger value="verified">
+                Terverifikasi ({verifiedSempros.length})
+              </TabsTrigger>
+              <TabsTrigger value="scheduled">
+                Terjadwal ({scheduledSempros.length})
+              </TabsTrigger>
+              <TabsTrigger value="completed">
+                Selesai ({completedSempros.length})
+              </TabsTrigger>
+              <TabsTrigger value="revision">
+                Revisi ({revisionSempros.length})
+              </TabsTrigger>
+              <TabsTrigger value="rejected">
+                Ditolak ({rejectedSempros.length})
+              </TabsTrigger>
+            </TabsList>
+          </div>
+          
+          <TabsContent value="registered">
+            <Card>
+              <CardHeader>
+                <CardTitle>Pendaftaran Terdaftar</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <SemproList 
+                  semproList={registeredSempros} 
+                  userRole={userRole}
+                  isLoading={isLoading} 
+                />
+              </CardContent>
+            </Card>
+          </TabsContent>
+          
+          <TabsContent value="verified">
+            <Card>
+              <CardHeader>
+                <CardTitle>Pendaftaran Terverifikasi</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <SemproList 
+                  semproList={verifiedSempros} 
+                  userRole={userRole}
+                  isLoading={isLoading} 
+                />
+              </CardContent>
+            </Card>
+          </TabsContent>
+          
+          <TabsContent value="scheduled">
+            <Card>
+              <CardHeader>
+                <CardTitle>Seminar Terjadwal</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <SemproList 
+                  semproList={scheduledSempros} 
+                  userRole={userRole}
+                  isLoading={isLoading} 
+                />
+              </CardContent>
+            </Card>
+          </TabsContent>
+          
+          <TabsContent value="completed">
+            <Card>
+              <CardHeader>
+                <CardTitle>Seminar Selesai</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <SemproList 
+                  semproList={completedSempros} 
+                  userRole={userRole}
+                  isLoading={isLoading} 
+                />
+              </CardContent>
+            </Card>
+          </TabsContent>
+          
+          <TabsContent value="revision">
+            <Card>
+              <CardHeader>
+                <CardTitle>Perlu Revisi</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <SemproList 
+                  semproList={revisionSempros} 
+                  userRole={userRole}
+                  isLoading={isLoading} 
+                />
+              </CardContent>
+            </Card>
+          </TabsContent>
+          
+          <TabsContent value="rejected">
+            <Card>
+              <CardHeader>
+                <CardTitle>Pendaftaran Ditolak</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <SemproList 
+                  semproList={rejectedSempros} 
+                  userRole={userRole}
+                  isLoading={isLoading} 
+                />
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+      )}
+      
+      {/* Mahasiswa Content (not in Tabs) */}
+      {userRole === 'mahasiswa' && (
+        <>
+          <SemproList 
+            semproList={semproData || []} 
+            userRole={userRole}
+            isLoading={isLoading}
+          />
+          
+          {/* Period notice */}
+          {!isLoadingPeriodes && !isActivePeriodeAvailable && (semproData || []).length === 0 && (
+            <Card className="mt-4">
+              <CardContent className="p-6">
+                <div className="bg-amber-50 border border-amber-200 rounded-md p-4 text-amber-800">
+                  <h3 className="font-medium">Periode Pendaftaran</h3>
+                  <p className="text-sm mt-1">
+                    Tidak ada periode pendaftaran seminar proposal yang aktif saat ini. 
+                    Silakan tunggu hingga periode pendaftaran dibuka.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+          
+          {/* Debug button - only in development */}
+          {process.env.NODE_ENV === 'development' && (
+            <div className="mt-8 text-right">
+              <button 
+                onClick={toggleDebugInfo} 
+                className="text-xs text-gray-400 hover:text-gray-600"
+              >
+                {showDebugInfo ? 'Hide Debug Info' : 'Show Debug Info'}
+              </button>
+            </div>
+          )}
+          
+          {/* Debug information */}
+          {showDebugInfo && (
+            <div className="mt-2 p-4 bg-gray-100 rounded-md text-xs font-mono">
+              <div>User ID: {user?.id || 'Not set'}</div>
+              <div>User Roles: {user?.roles?.join(', ') || 'None'}</div>
+              <div>Data Count: {semproData?.length || 0}</div>
+              <div>Active Period: {isActivePeriodeAvailable ? activePeriodes[0].nama_periode : 'None'}</div>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }
