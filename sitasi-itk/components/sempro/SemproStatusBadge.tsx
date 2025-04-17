@@ -32,6 +32,11 @@ export function SemproStatusBadge({ status, className = "" }: SemproStatusBadgeP
       textColor = "text-green-800";
       label = "Selesai";
       break;
+    case "evaluated": // Menggunakan nilai database yang benar
+      bgColor = "bg-purple-100";
+      textColor = "text-purple-800";
+      label = "Terverifikasi"; // Label tetap sama untuk konsistensi UI
+      break;
     case "revision_required":
       bgColor = "bg-amber-100";
       textColor = "text-amber-800";

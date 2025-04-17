@@ -757,12 +757,27 @@ export function useUpdateSemproStatus() {
       
       try {
         console.log(`Updating sempro status to ${status} for ID: ${id}`);
+
+        // Pemetaan status frontend ke status database
+        let dbStatus;
+        switch (status) {
+          case 'verified': // Nilai di frontend yang tidak ada di database
+            dbStatus = 'evaluated'; // Nilai yang benar di database
+            break;
+          case 'rejected': // Nilai di frontend yang tidak ada di database
+            // Karena 'rejected' tidak ada, kita gunakan status lain atau tambahkan penanganan khusus
+            dbStatus = 'registered';
+            catatan = `DITOLAK: ${catatan || 'Dokumen tidak memenuhi syarat'}`;
+            break;
+          default:
+            dbStatus = status; // Nilai lain yang sama di frontend dan database
+        }
         
-        // Update hanya status, tanpa field catatan
+        // Update dengan status yang sudah dipetakan
         const { data, error } = await supabase
           .from('sempros')
           .update({
-            status,
+            status: dbStatus, // PERBAIKAN: Gunakan dbStatus yang sudah dipetakan
             updated_at: new Date().toISOString()
           })
           .eq('id', id)
@@ -1352,6 +1367,125 @@ export function useSubmitPenilaianSempro() {
         variant: "destructive",
         title: "Gagal Mengirim Penilaian",
         description: error.message || "Terjadi kesalahan saat mengirim penilaian seminar proposal.",
+      });
+    },
+  });
+}
+
+// Revise sempro documents
+export function useReviseSempro() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const { user } = useAuth();
+  const router = useRouter();
+  
+  return useMutation({
+    mutationFn: async ({ 
+      id, 
+      catatan, 
+      dokumen_ta012_metadata, 
+      dokumen_plagiarisme_metadata, 
+      dokumen_draft_metadata 
+    }: { 
+      id: string;
+      catatan?: string;
+      dokumen_ta012_metadata?: FileMetadata | null; // Ubah tipe
+      dokumen_plagiarisme_metadata?: FileMetadata | null; // Ubah tipe
+      dokumen_draft_metadata?: FileMetadata | null; // Ubah tipe
+    }) => {
+      if (!user) {
+        throw new Error('User not authenticated');
+      }
+      
+      try {
+        console.log("====== MEMULAI PROSES REVISI SEMPRO ======");
+        console.log("User:", user.id);
+        console.log("Sempro ID:", id);
+        
+        // Persiapkan data update
+        const updateData: any = {
+          status: 'registered', // Reset status to registered for admin review
+          updated_at: new Date().toISOString()
+        };
+        
+        // Tambahkan file yang diupload ulang
+        if (dokumen_ta012_metadata) {
+          updateData.form_ta_012 = dokumen_ta012_metadata.fileUrl;
+        }
+        
+        if (dokumen_plagiarisme_metadata) {
+          updateData.bukti_plagiasi = dokumen_plagiarisme_metadata.fileUrl;
+        }
+        
+        if (dokumen_draft_metadata) {
+          updateData.proposal_ta = dokumen_draft_metadata.fileUrl;
+        }
+        
+        console.log("Data update:", updateData);
+        
+        // Update sempro record
+        const { data, error } = await supabase
+          .from('sempros')
+          .update(updateData)
+          .eq('id', id)
+          .eq('user_id', user.id) // Security check
+          .eq('status', 'revision_required') // Only allow revision for the correct status
+          .select();
+          
+        if (error) {
+          console.error('Error updating sempro for revision:', error);
+          throw error;
+        }
+        
+        if (!data || data.length === 0) {
+          throw new Error('Gagal mengupdate data sempro');
+        }
+        
+        // Add to revision history
+        await supabase
+          .from('riwayat_pendaftaran_sempros')
+          .insert([{
+            sempro_id: id,
+            pengajuan_ta_id: data[0].pengajuan_ta_id,
+            user_id: user.id,
+            keterangan: catatan 
+              ? `Revisi diupload: ${catatan}` 
+              : 'Dokumen revisi telah diupload',
+            status: 'registered'
+          }]);
+        
+        console.log("====== PROSES REVISI SEMPRO SELESAI ======");
+        return data[0];
+      } catch (error) {
+        console.error('Error in revise sempro process:', error);
+        throw error instanceof Error ? error : new Error(String(error));
+      }
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['sempros'] });
+      queryClient.invalidateQueries({ queryKey: ['sempro', data.id] });
+      
+      toast({
+        title: "Revisi Berhasil",
+        description: "Dokumen revisi berhasil diupload. Menunggu verifikasi admin.",
+      });
+      
+      // Redirect to sempro list
+      setTimeout(() => {
+          try {
+            // Force redirect ke halaman sempro
+            window.location.href = '/dashboard/sempro';
+          } catch (e) {
+            console.error('Error redirecting:', e);
+            router.push('/dashboard/sempro');
+          }
+        }, 1500);
+      },
+    onError: (error: Error) => {
+      toast({
+        variant: "destructive",
+        title: "Gagal Merevisi",
+        description: error.message || "Terjadi kesalahan saat mengupload revisi.",
       });
     },
   });

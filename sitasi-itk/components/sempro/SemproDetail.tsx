@@ -300,7 +300,7 @@ export function SemproDetail({
             </Button>
             
             <div className="flex gap-2">
-              {/* Admin actions */}
+              {/* Admin actions - verifikasi, tolak, minta revisi, jadwalkan */}
               {(userRole === 'tendik' || userRole === 'koorpro') && (
                 <>
                   {/* Verify button */}
@@ -317,8 +317,8 @@ export function SemproDetail({
                     </Button>
                   )}
                   
-                  {/* Schedule button */}
-                  {sempro.status === 'verified' && (
+                   {/* Schedule button */}
+                  {(sempro.status === 'evaluated' || sempro.status === 'verified') && (
                     <Button asChild>
                       <Link href={`/dashboard/sempro/schedule/${sempro.id}`}>
                         <Calendar className="h-4 w-4 mr-2" />
@@ -355,6 +355,16 @@ export function SemproDetail({
                     </Button>
                   )}
                 </>
+              )}
+              
+              {/* Mahasiswa actions - upload revisi */}
+              {userRole === 'mahasiswa' && sempro.status === 'revision_required' && (
+                <Button asChild variant="default">
+                  <Link href={`/dashboard/sempro/revise/${sempro.id}`}>
+                    <FileText className="h-4 w-4 mr-2" />
+                    Upload Revisi
+                  </Link>
+                </Button>
               )}
             </div>
           </CardFooter>

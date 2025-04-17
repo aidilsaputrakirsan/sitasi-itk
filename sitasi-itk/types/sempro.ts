@@ -1,12 +1,14 @@
 // types/sempro.ts
 
+// types/sempro.ts - Definisi tipe StatusSempro
 export type StatusSempro = 
   | 'registered'         // Awal pendaftaran
-  | 'verified'           // Dokumen terverifikasi
+  | 'evaluated'          // Dokumen terverifikasi di database
+  | 'verified'           // Nilai frontend untuk 'evaluated'
   | 'scheduled'          // Sudah dijadwalkan
   | 'completed'          // Seminar selesai
   | 'revision_required'  // Perlu revisi
-  | 'rejected';          // Ditolak
+  | 'rejected';          // Nilai frontend untuk penolakan
 
 export interface FileMetadata {
   fileId: string;
@@ -28,6 +30,14 @@ export interface Sempro {
   form_ta_012: string | null;
   bukti_plagiasi: string | null;
   proposal_ta: string | null;
+
+  revisi_pembimbing_1: string | null;
+  revisi_pembimbing_2: string | null;
+  revisi_penguji_1: string | null;
+  revisi_penguji_2: string | null;
+
+  approve_pembimbing_1: boolean | null;
+  approve_pembimbing_2: boolean | null;
   
   // Keep these for backwards compatibility (jika kode lain masih menggunakannya)
   dokumen_ta012?: FileMetadata | null;
@@ -187,4 +197,14 @@ export interface PeriodeSemproFormValues {
   tanggal_mulai: string;
   tanggal_selesai: string;
   is_active: boolean;
+}
+
+export interface SemproRevisionFormValues {
+  catatan?: string;
+  dokumen_ta012?: File | null;
+  dokumen_plagiarisme?: File | null;
+  dokumen_draft?: File | null;
+  dokumen_ta012_metadata?: FileMetadata | null; // Ubah dari FileMetadata menjadi FileMetadata | null
+  dokumen_plagiarisme_metadata?: FileMetadata | null; // Ubah dari FileMetadata menjadi FileMetadata | null
+  dokumen_draft_metadata?: FileMetadata | null; // Ubah dari FileMetadata menjadi FileMetadata | null
 }
