@@ -45,7 +45,8 @@ export default function SemproPage() {
     : [];
   
   const verifiedSempros = userRole !== 'dosen' 
-    ? (semproData as Sempro[] || []).filter(s => s.status === 'verified')
+    ? (semproData as Sempro[] || []).filter(s => 
+        s.status === 'verified' || s.status === 'evaluated') // Tambah kondisi untuk 'evaluated'
     : [];
     
   const scheduledSempros = userRole !== 'dosen' 
