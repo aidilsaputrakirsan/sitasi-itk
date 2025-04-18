@@ -38,6 +38,7 @@ export default function RegisterPage() {
   });
 
   const onSubmit = async (data: RegisterFormValues) => {
+    if (isSubmitting) return; // Prevent multiple submissions
     setIsSubmitting(true);
     setError(null);
 
@@ -64,6 +65,11 @@ export default function RegisterPage() {
       console.error('Registration error:', err);
       setError('Terjadi kesalahan saat pendaftaran');
       setIsSubmitting(false);
+    } finally {
+      // Add a small delay before allowing resubmission
+      setTimeout(() => {
+        setIsSubmitting(false);
+      }, 1000);
     }
   };
 
