@@ -37,46 +37,55 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'User creation failed' }, { status: 500 });
     }
 
-    // 2. Buat profil untuk user baru - ini akan memicu trigger untuk profil spesifik peran
     const userId = authData.user.id;
     const role = credentials.role;
-    const roles = [role];
-    
-    const { error: profileError } = await supabaseAdmin
-      .from('profiles')
-      .insert({
-        id: userId,
-        name: credentials.name,
-        username: credentials.username,
-        roles: roles
-      });
 
-    // Jika ada error saat membuat profil, coba pendekatan lain
-    if (profileError) {
-      console.error('API Route: Profile creation error:', profileError);
+    // 2. Mencoba membuat profil dengan beberapa pendekatan
+    // Pendekatan 1: Gunakan RPC untuk membuat profil dan profil spesifik
+    try {
+      const rpcResult = await supabaseAdmin.rpc('create_profile_with_role', {
+        p_user_id: userId,
+        p_name: credentials.name,
+        p_username: credentials.username,
+        p_role: role,
+        p_email: credentials.email
+      });
       
-      // Coba panggil fungsi RPC untuk membuat profil
-      try {
-        await supabaseAdmin.rpc('create_profile_manually', {
-          p_user_id: userId,
-          p_name: credentials.name,
-          p_username: credentials.username,
-          p_role: role
-        });
-        
-        console.log('API Route: Profile created via RPC function');
-      } catch (rpcError) {
-        console.error('API Route: RPC error:', rpcError);
-        // Pesan khusus untuk client tapi tetap anggap berhasil
+      console.log('API Route: RPC result:', rpcResult);
+      
+      // Jika RPC berhasil, kita sudah selesai
+      if (!rpcResult.error) {
+        console.log('API Route: Profile created via RPC');
         return NextResponse.json({
           success: true,
-          user: authData.user,
-          warning: "User created but profile may need to be completed later"
+          user: authData.user
         });
       }
+    } catch (rpcError) {
+      console.error('API Route: RPC error:', rpcError);
+      // Lanjutkan ke pendekatan berikutnya
+    }
+
+    // Pendekatan 2: Coba JSON_BUILD_ARRAY untuk roles
+    try {
+      // JSON_BUILD_ARRAY menghasilkan JSON array yang kemudian di-cast ke text[]
+      const { error: profileError } = await supabaseAdmin.rpc('create_profile_json_array', {
+        p_id: userId,
+        p_name: credentials.name,
+        p_username: credentials.username,
+        p_role: role
+      });
+
+      if (profileError) {
+        console.error('API Route: JSON array approach error:', profileError);
+      } else {
+        console.log('API Route: Profile created via JSON array approach');
+      }
+    } catch (jsonError) {
+      console.error('API Route: JSON array approach exception:', jsonError);
     }
     
-    // 3. Buat profil spesifik sesuai peran (pendekatan langsung)
+    // Pendekatan 3: Buat profil spesifik peran langsung (backup)
     try {
       if (role === 'mahasiswa') {
         await supabaseAdmin
@@ -87,6 +96,7 @@ export async function POST(request: Request) {
             nim: credentials.username,
             email: credentials.email
           });
+        console.log('API Route: Mahasiswa profile created directly');
       } else if (role === 'dosen') {
         await supabaseAdmin
           .from('dosens')
@@ -96,15 +106,15 @@ export async function POST(request: Request) {
             nip: credentials.username,
             email: credentials.email
           });
+        console.log('API Route: Dosen profile created directly');
       }
-      // tendik dan koorpro tidak perlu dihandle di sini karena tidak ada di form pendaftaran
-      
     } catch (specificProfileError) {
-      console.error(`API Route: Error creating ${role} profile:`, specificProfileError);
-      // Tidak mengembalikan error karena profil spesifik dapat dibuat nanti
+      console.error(`API Route: Error creating ${role} profile directly:`, specificProfileError);
     }
     
-    console.log('API Route: Registration successful');
+    // Pendekatan terakhir: Trigger diharapkan telah membuat profil di background
+    
+    console.log('API Route: Registration completed. Relying on triggers for profile creation.');
     return NextResponse.json({
       success: true,
       user: authData.user

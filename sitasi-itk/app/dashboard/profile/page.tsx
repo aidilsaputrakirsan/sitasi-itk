@@ -134,6 +134,7 @@ export default function ProfilePage() {
         setProfileRole(userRole);
         console.log(`User role: ${userRole}`);
         
+        // === BAGIAN MAHASISWA ===
         if (userRole === 'mahasiswa') {
           try {
             console.log('Checking student profile for user:', user.id);
@@ -141,12 +142,46 @@ export default function ProfilePage() {
               .from('mahasiswas')
               .select('id, nama, nim, email, nomor_telepon')
               .eq('user_id', user.id)
-              .limit(1);
+              .single(); // Gunakan single() alih-alih limit(1) untuk mendapatkan objek langsung
             
-            // Existing error handling...
-            
-            if (mahasiswaData && mahasiswaData.length > 0) {
-              // Existing profile handling...
+            if (mahasiswaError) {
+              // Jika error bukan karena "tidak ada data", maka tampilkan error
+              if (mahasiswaError.code !== 'PGRST116') {
+                console.error('Error fetching student profile:', mahasiswaError);
+                toast({
+                  variant: "destructive",
+                  title: "Error",
+                  description: "Terjadi kesalahan saat memuat profil mahasiswa: " + getErrorMessage(mahasiswaError),
+                });
+              } else {
+                console.log('No student profile found for user');
+                setProfileExists(false);
+                
+                // Pre-fill form with auth user data
+                if (user.name) setStudentValue('nama', user.name);
+                if (user.email) setStudentValue('email', user.email);
+                if (user.username) setStudentValue('nim', user.username);
+              }
+            } else if (mahasiswaData) {
+              // Data mahasiswa ditemukan, isi form dengan data tersebut
+              console.log('Found student profile:', mahasiswaData);
+              setProfileExists(true);
+              
+              // Perbarui semua nilai form
+              setStudentValue('nama', mahasiswaData.nama || '');
+              setStudentValue('nim', mahasiswaData.nim || '');
+              setStudentValue('email', mahasiswaData.email || '');
+              setStudentValue('nomor_telepon', mahasiswaData.nomor_telepon || '');
+              
+              // Tampilkan toast sukses jika baru saja menyimpan
+              const justSaved = sessionStorage.getItem('profile_just_saved');
+              if (justSaved) {
+                sessionStorage.removeItem('profile_just_saved');
+                toast({
+                  title: "Profil Berhasil Disimpan",
+                  description: "Data profil mahasiswa berhasil disimpan.",
+                });
+              }
             } else {
               console.log('No student profile found for user');
               setProfileExists(false);
@@ -154,7 +189,7 @@ export default function ProfilePage() {
               // Pre-fill form with auth user data
               if (user.name) setStudentValue('nama', user.name);
               if (user.email) setStudentValue('email', user.email);
-              if (user.username) setStudentValue('nim', user.username); // Mengisi NIM dari username
+              if (user.username) setStudentValue('nim', user.username);
             }
           } catch (error) {
             console.error('Error in mahasiswa profile check:', error);
@@ -165,34 +200,60 @@ export default function ProfilePage() {
             });
             setProfileExists(false);
           }
-        } else if (userRole === 'dosen') {
+        }
+        
+        // === BAGIAN DOSEN ===
+        else if (userRole === 'dosen') {
           try {
             console.log('Checking lecturer profile for user:', user.id);
             const { data: dosenData, error: dosenError } = await supabase
               .from('dosens')
               .select('id, nama_dosen, nip, email')
               .eq('user_id', user.id)
-              .limit(1);
+              .single(); // Gunakan single() untuk mendapatkan objek langsung
             
             if (dosenError) {
-              console.error('Error fetching lecturer profile:', dosenError);
-              toast({
-                variant: "destructive",
-                title: "Error",
-                description: "Terjadi kesalahan saat memuat profil dosen: " + getErrorMessage(dosenError),
-              });
-            }
-            
-            if (dosenData && dosenData.length > 0) {
-              console.log('Found lecturer profile:', dosenData[0]);
+              // Jika error bukan karena "tidak ada data", maka tampilkan error
+              if (dosenError.code !== 'PGRST116') {
+                console.error('Error fetching lecturer profile:', dosenError);
+                toast({
+                  variant: "destructive",
+                  title: "Error",
+                  description: "Terjadi kesalahan saat memuat profil dosen: " + getErrorMessage(dosenError),
+                });
+              } else {
+                console.log('No lecturer profile found for user');
+                setProfileExists(false);
+                
+                // Pre-fill form with auth user data
+                if (user.name) setDosenValue('nama_dosen', user.name);
+                if (user.email) setDosenValue('email', user.email);
+                if (user.username) setDosenValue('nip', user.username);
+              }
+            } else if (dosenData) {
+              // Data dosen ditemukan, isi form dengan data tersebut
+              console.log('Found lecturer profile:', dosenData);
               setProfileExists(true);
-              setDosenValue('nama_dosen', dosenData[0].nama_dosen || '');
-              setDosenValue('nip', dosenData[0].nip || '');
-              setDosenValue('email', dosenData[0].email || '');
+              
+              // Perbarui semua nilai form
+              setDosenValue('nama_dosen', dosenData.nama_dosen || '');
+              setDosenValue('nip', dosenData.nip || '');
+              setDosenValue('email', dosenData.email || '');
+              
+              // Tampilkan toast sukses jika baru saja menyimpan
+              const justSaved = sessionStorage.getItem('profile_just_saved');
+              if (justSaved) {
+                sessionStorage.removeItem('profile_just_saved');
+                toast({
+                  title: "Profil Berhasil Disimpan",
+                  description: "Data profil dosen berhasil disimpan.",
+                });
+              }
             } else {
               console.log('No lecturer profile found for user');
               setProfileExists(false);
               
+              // Pre-fill form with auth user data
               if (user.name) setDosenValue('nama_dosen', user.name);
               if (user.email) setDosenValue('email', user.email);
               if (user.username) setDosenValue('nip', user.username);
@@ -206,38 +267,65 @@ export default function ProfilePage() {
             });
             setProfileExists(false);
           }
-        } else if (userRole === 'tendik' || userRole === 'koorpro') {
+        }
+        
+        // === BAGIAN TENDIK & KOORPRO ===
+        else if (userRole === 'tendik' || userRole === 'koorpro') {
           try {
             console.log('Checking staff profile for user:', user.id);
             const { data: tendikData, error: tendikError } = await supabase
               .from('tendiks')
               .select('id, nama_tendik, nip, email, jabatan')
               .eq('user_id', user.id)
-              .limit(1);
+              .single(); // Gunakan single() untuk mendapatkan objek langsung
             
             if (tendikError) {
-              console.error('Error fetching staff profile:', tendikError);
-              toast({
-                variant: "destructive",
-                title: "Error",
-                description: "Terjadi kesalahan saat memuat profil: " + getErrorMessage(tendikError),
-              });
-            }
-            
-            if (tendikData && tendikData.length > 0) {
-              console.log('Found staff profile:', tendikData[0]);
+              // Jika error bukan karena "tidak ada data", maka tampilkan error
+              if (tendikError.code !== 'PGRST116') {
+                console.error('Error fetching staff profile:', tendikError);
+                toast({
+                  variant: "destructive",
+                  title: "Error",
+                  description: "Terjadi kesalahan saat memuat profil: " + getErrorMessage(tendikError),
+                });
+              } else {
+                console.log('No staff profile found for user');
+                setProfileExists(false);
+                
+                // Pre-fill form with auth user data
+                if (user.name) setTendikValue('nama_tendik', user.name);
+                if (user.email) setTendikValue('email', user.email);
+                if (user.username) setTendikValue('nip', user.username);
+                if (userRole === 'koorpro') setTendikValue('jabatan', 'Koordinator Program');
+              }
+            } else if (tendikData) {
+              // Data tendik ditemukan, isi form dengan data tersebut
+              console.log('Found staff profile:', tendikData);
               setProfileExists(true);
-              setTendikValue('nama_tendik', tendikData[0].nama_tendik || '');
-              setTendikValue('nip', tendikData[0].nip || '');
-              setTendikValue('email', tendikData[0].email || '');
-              setTendikValue('jabatan', tendikData[0].jabatan || '');
+              
+              // Perbarui semua nilai form
+              setTendikValue('nama_tendik', tendikData.nama_tendik || '');
+              setTendikValue('nip', tendikData.nip || '');
+              setTendikValue('email', tendikData.email || '');
+              setTendikValue('jabatan', tendikData.jabatan || (userRole === 'koorpro' ? 'Koordinator Program' : ''));
+              
+              // Tampilkan toast sukses jika baru saja menyimpan
+              const justSaved = sessionStorage.getItem('profile_just_saved');
+              if (justSaved) {
+                sessionStorage.removeItem('profile_just_saved');
+                toast({
+                  title: "Profil Berhasil Disimpan",
+                  description: "Data profil staf berhasil disimpan.",
+                });
+              }
             } else {
               console.log('No staff profile found for user');
               setProfileExists(false);
               
-              // Pre-fill with user data if available
+              // Pre-fill form with auth user data
               if (user.name) setTendikValue('nama_tendik', user.name);
               if (user.email) setTendikValue('email', user.email);
+              if (user.username) setTendikValue('nip', user.username);
               if (userRole === 'koorpro') setTendikValue('jabatan', 'Koordinator Program');
             }
           } catch (error) {
@@ -250,6 +338,7 @@ export default function ProfilePage() {
             setProfileExists(false);
           }
         }
+        
       } catch (error) {
         console.error('Error checking profile:', error);
         toast({
@@ -270,6 +359,7 @@ export default function ProfilePage() {
   }, [user, toast, setStudentValue, setDosenValue, setTendikValue]);
   
   // Submit handlers
+  // Perbaikan untuk fungsi onSubmitStudent
   const onSubmitStudent = async (data: StudentProfileFormValues) => {
     if (!user) return;
     
@@ -336,17 +426,20 @@ export default function ProfilePage() {
         console.error('Error updating profiles table:', profileError);
       }
       
+      // Set a flag to show success message after page reloads
+      sessionStorage.setItem('profile_just_saved', 'true');
+      
+      setProfileExists(true);
+      
       toast({
         title: "Profil Berhasil Disimpan",
         description: "Data profil mahasiswa berhasil disimpan.",
       });
       
-      setProfileExists(true);
-      
-      // Refresh page
+      // Refresh halaman dengan timeout untuk memberikan waktu toast notification ditampilkan
       setTimeout(() => {
         window.location.reload();
-      }, 1000);
+      }, 1500);
     } catch (error) {
       console.error('Error saving student profile:', error);
       toast({
@@ -359,6 +452,8 @@ export default function ProfilePage() {
     }
   };
   
+  // Fungsi onSubmitDosen yang telah diperbaiki
+  // Perbaikan: Fungsi onSubmitDosen dengan tanpa memanggil checkProfile secara langsung
   const onSubmitDosen = async (data: DosenProfileFormValues) => {
     if (!user) return;
     
@@ -423,17 +518,21 @@ export default function ProfilePage() {
         console.error('Error updating profiles table:', profileError);
       }
       
+      // Set a flag to show success message after page reloads
+      sessionStorage.setItem('profile_just_saved', 'true');
+      
+      setProfileExists(true);
+      
       toast({
         title: "Profil Berhasil Disimpan",
         description: "Data profil dosen berhasil disimpan.",
       });
       
-      setProfileExists(true);
-      
-      // Refresh page
+      // PERBAIKAN: Daripada memanggil checkProfile(), refresh halaman dengan timeout
+      // untuk memberikan waktu toast notification ditampilkan
       setTimeout(() => {
         window.location.reload();
-      }, 1000);
+      }, 1500);
     } catch (error) {
       console.error('Error saving lecturer profile:', error);
       toast({
@@ -446,6 +545,7 @@ export default function ProfilePage() {
     }
   };
   
+ // Fungsi onSubmitTendik yang telah diperbaiki
   const onSubmitTendik = async (data: TendikProfileFormValues) => {
     if (!user) return;
     
@@ -512,17 +612,21 @@ export default function ProfilePage() {
         console.error('Error updating profiles table:', profileError);
       }
       
+      // Set a flag to show success message after page reloads
+      sessionStorage.setItem('profile_just_saved', 'true');
+      
+      setProfileExists(true);
+      
       toast({
         title: "Profil Berhasil Disimpan",
         description: "Data profil staf berhasil disimpan.",
       });
       
-      setProfileExists(true);
-      
-      // Refresh page
+      // PERBAIKAN: Daripada memanggil checkProfile(), refresh halaman dengan timeout
+      // untuk memberikan waktu toast notification ditampilkan
       setTimeout(() => {
         window.location.reload();
-      }, 1000);
+      }, 1500);
     } catch (error) {
       console.error('Error saving staff profile:', error);
       toast({
