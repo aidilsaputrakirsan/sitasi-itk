@@ -38,8 +38,7 @@ export default function RegisterPage() {
     },
   });
 
-  // Modifikasi di sitasi-itk/app/(auth)/register/page.tsx
-  // Pada fungsi onSubmit
+  // Fungsi onSubmit yang bekerja dengan API route
   const onSubmit = async (data: RegisterFormValues) => {
     if (isSubmitting) return;
     setIsSubmitting(true);
@@ -59,25 +58,24 @@ export default function RegisterPage() {
         password: '[DISEMBUNYIKAN]'
       });
 
-      const { error, user } = await registerUser(credentials);
+      // Panggil fungsi register yang sekarang menggunakan API route
+      const result = await registerUser(credentials);
 
-      if (error) {
-        console.error('Error registrasi:', error);
-        setError('Terjadi kesalahan: ' + error.message);
+      if (result.error) {
+        console.error('Error registrasi:', result.error);
+        setError('Terjadi kesalahan: ' + result.error.message);
         setIsSubmitting(false);
         return;
       }
 
-      // Tampilkan pesan verifikasi
+      // Jika sukses, tampilkan pesan sukses
+      console.log('Pendaftaran berhasil, menampilkan pesan verifikasi');
       setVerificationSent(true);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Registration error:', err);
-      setError('Terjadi kesalahan tak terduga saat pendaftaran. Silakan coba lagi nanti.');
-      setIsSubmitting(false);
+      setError('Terjadi kesalahan tak terduga: ' + (err.message || 'Silakan coba lagi nanti.'));
     } finally {
-      setTimeout(() => {
-        setIsSubmitting(false);
-      }, 1000);
+      setIsSubmitting(false);
     }
   };
 

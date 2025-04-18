@@ -284,36 +284,38 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   // Improved register function
+  // Modifikasi fungsi register di AuthContext.tsx
+  // Enhanced register function for AuthContext.tsx
+  // Perbaikan fungsi register di AuthContext.tsx untuk menggunakan API route
+  // Fungsi register untuk ditambahkan ke AuthContext.tsx
   const register = async (credentials: RegisterCredentials) => {
     try {
       console.log('Starting registration for:', credentials.email);
       setState(prevState => ({ ...prevState, isLoading: true, error: null }));
       
-      // Register user with Supabase Auth dengan opsi minimal
-      const { data, error } = await supabase.auth.signUp({
-        email: credentials.email,
-        password: credentials.password,
-        options: {
-          data: {
-            name: credentials.name,
-            role: credentials.role,
-            username: credentials.username
-          },
-          emailRedirectTo: `${window.location.origin}/login`
-        }
+      // Gunakan API route untuk pendaftaran
+      const response = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(credentials),
       });
-  
-      if (error) {
-        console.error('Registration auth error:', error);
-        setState(prevState => ({ ...prevState, error: error as unknown as Error, isLoading: false }));
-        return { error: error as unknown as Error, user: null };
+      
+      const result = await response.json();
+      
+      if (!response.ok) {
+        console.error('Registration error from API:', result.error);
+        const error = new Error(result.error || 'Registration failed');
+        setState(prevState => ({ ...prevState, error: error, isLoading: false }));
+        return { error, user: null };
       }
-  
-      console.log('Auth signup successful, user created:', data.user?.id);
+      
+      console.log('Registration successful via API route');
       
       // Set state dan return
-      setState({ ...state, isLoading: false });
-      return { error: null, user: data.user };
+      setState(prevState => ({ ...prevState, isLoading: false }));
+      return { error: null, user: result.user };
     } catch (error) {
       console.error("Unexpected error in register:", error);
       setState(prevState => ({ ...prevState, error: error as Error, isLoading: false }));
