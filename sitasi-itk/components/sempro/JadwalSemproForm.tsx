@@ -41,6 +41,7 @@ interface JadwalSemproFormProps {
   userId: string;
   pembimbing1?: string;
   pembimbing2?: string;
+  isEditing?: boolean;
 }
 
 export function JadwalSemproForm({ 
@@ -51,7 +52,8 @@ export function JadwalSemproForm({
   pengajuanTaId,
   userId,
   pembimbing1,
-  pembimbing2
+  pembimbing2,
+  isEditing = false
 }: JadwalSemproFormProps) {
   // Fetch data for dropdowns
   const { data: dosens, isLoading: isLoadingDosens } = useDosens();
@@ -253,12 +255,16 @@ export function JadwalSemproForm({
 
         </CardContent>
         <CardFooter className="flex justify-between">
-          <Button variant="outline" type="button" onClick={() => window.history.back()}>
-            Batal
-          </Button>
-          <Button type="submit" disabled={!!isSubmitting}>
-            {isSubmitting ? 'Menyimpan...' : 'Simpan Jadwal'}
-          </Button>
+        <Button variant="outline" type="button" onClick={() => window.history.back()}>
+          Batal
+        </Button>
+        <Button type="submit" disabled={!!isSubmitting}>
+          {isSubmitting 
+            ? 'Menyimpan...' 
+            : isEditing 
+              ? 'Perbarui Jadwal' 
+              : 'Simpan Jadwal'}
+        </Button>
         </CardFooter>
       </form>
     </Card>

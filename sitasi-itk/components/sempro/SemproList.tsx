@@ -42,6 +42,10 @@ export function SemproList({
     return timeString.substring(0, 5); // Format: HH:mm
   };
 
+  // Check if we have jadwal data
+  const hasValidJadwalData = isJadwalView && semproList.length > 0 && 
+    'tanggal_sempro' in semproList[0];
+
   if (isLoading) {
     return (
       <Card>
@@ -80,7 +84,7 @@ export function SemproList({
   // Render different tables for sempro list and jadwal list
   return (
     <div className="rounded-md border">
-      {isJadwalView ? (
+      {isJadwalView && hasValidJadwalData ? (
         // Jadwal View
         <Table>
           <TableHeader>

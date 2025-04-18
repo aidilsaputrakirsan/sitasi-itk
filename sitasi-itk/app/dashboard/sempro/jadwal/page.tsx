@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { SemproList } from '@/components/sempro/SemproList';
-import { useRoleBasedSempros } from '@/hooks/useSempro';
+import { useAllJadwalSempros } from '@/hooks/useSempro'; // Ubah ke hook baru
 import { UserRole } from '@/types/auth';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
@@ -30,37 +30,47 @@ export default function JadwalSemproPage() {
     }
   }, [user]);
   
-  // Get jadwal data based on role
-  const { data: jadwalData, isLoading } = useRoleBasedSempros();
+  // Gunakan hook baru untuk data jadwal
+  const { data: jadwalData, isLoading } = useAllJadwalSempros();
   
-  // Filter only jadwal data if the data is jadwal sempro
-  const isJadwalData = Array.isArray(jadwalData) && 
-    jadwalData.length > 0 && 
-    'tanggal_sempro' in jadwalData[0];
+  // Tambahkan filter untuk jadwal berdasarkan peran
+  let filteredJadwalData = jadwalData || [];
+
+  // Filter for dosen: only show jadwal where they are penguji
+  if (userRole === 'dosen' && user) {
+    filteredJadwalData = filteredJadwalData.filter(j => 
+      j.penguji_1 === user.id || j.penguji_2 === user.id
+    );
+  }
+
+  // Filter for mahasiswa: only show published jadwal or their own jadwal
+  if (userRole === 'mahasiswa' && user) {
+    filteredJadwalData = filteredJadwalData.filter(j => 
+      j.is_published || j.user_id === user.id
+    );
+  }
   
   // For filtering (mostly for dosen view to only see future jadwal)
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   
-  // Filter future and past jadwal
-  const futureJadwal = isJadwalData
-    ? (jadwalData as JadwalSempro[]).filter(j => {
-        const seminarDate = new Date(j.tanggal_sempro);
-        seminarDate.setHours(0, 0, 0, 0);
-        return seminarDate >= today;
-      })
-    : [];
+  // Filter future and past jadwal menggunakan filteredJadwalData
+  const futureJadwal = filteredJadwalData
+    .filter(j => {
+      const seminarDate = new Date(j.tanggal_sempro);
+      seminarDate.setHours(0, 0, 0, 0);
+      return seminarDate >= today;
+    });
     
-  const pastJadwal = isJadwalData
-    ? (jadwalData as JadwalSempro[]).filter(j => {
-        const seminarDate = new Date(j.tanggal_sempro);
-        seminarDate.setHours(0, 0, 0, 0);
-        return seminarDate < today;
-      })
-    : [];
+  const pastJadwal = filteredJadwalData
+    .filter(j => {
+      const seminarDate = new Date(j.tanggal_sempro);
+      seminarDate.setHours(0, 0, 0, 0);
+      return seminarDate < today;
+    });
   
   // Determine if we have data to show
-  const hasData = isJadwalData && jadwalData.length > 0;
+  const hasData = filteredJadwalData.length > 0;
   
   return (
     <div>

@@ -5,17 +5,14 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { JadwalSemproDetail } from '@/components/sempro/JadwalSemproDetail';
 import { UserRole } from '@/types/auth';
-import { supabase } from '@/lib/supabase';
-import { JadwalSempro } from '@/types/sempro';
+import { useJadwalSemproDetail } from '@/hooks/useSempro'; // Ganti dengan hook yang sudah diperbaiki
 
 export default function JadwalSemproDetailPage({ params }: { params: { id: string } }) {
   const router = useRouter();
   const { user } = useAuth();
   const [userRole, setUserRole] = useState<UserRole>('mahasiswa');
-  const [jadwal, setJadwal] = useState<JadwalSempro | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isError, setIsError] = useState(false);
-  const [errorMessage, setErrorMessage] = useState('');
+  // Ganti dengan hook yang sudah diperbaiki
+  const { data: jadwal, isLoading, isError, error } = useJadwalSemproDetail(params.id);
 
   // Set user role
   useEffect(() => {
@@ -31,83 +28,6 @@ export default function JadwalSemproDetailPage({ params }: { params: { id: strin
       setUserRole('mahasiswa');
     }
   }, [user]);
-
-  // Fetch jadwal data
-  useEffect(() => {
-    const fetchJadwal = async () => {
-      try {
-        setIsLoading(true);
-        
-        const { data, error } = await supabase
-          .from('jadwal_sempros')
-          .select(`
-            *,
-            pengajuan_ta:pengajuan_ta_id(judul, bidang_penelitian),
-            penguji1:penguji_1(nama_dosen, nip, email),
-            penguji2:penguji_2(nama_dosen, nip, email),
-            sempro:sempro_id(id, status)
-          `)
-          .eq('id', params.id)
-          .single();
-        
-        if (error) {
-          console.error('Error fetching jadwal:', error);
-          setIsError(true);
-          setErrorMessage(error.message);
-          return;
-        }
-        
-        if (!data) {
-          setIsError(true);
-          setErrorMessage('Jadwal tidak ditemukan');
-          return;
-        }
-        
-        // Get mahasiswa data
-        const { data: mahasiswaData, error: mahasiswaError } = await supabase
-          .from('mahasiswas')
-          .select('nama, nim, email, nomor_telepon')
-          .eq('user_id', data.user_id)
-          .single();
-        
-        if (mahasiswaError) {
-          console.error('Error fetching mahasiswa data:', mahasiswaError);
-        }
-        
-        // Map sempro data
-        let semproData = null;
-        if (data.pengajuan_ta_id && data.user_id) {
-          const { data: semproResult, error: semproError } = await supabase
-            .from('sempros')
-            .select('*')
-            .eq('pengajuan_ta_id', data.pengajuan_ta_id)
-            .eq('user_id', data.user_id)
-            .single();
-            
-          if (!semproError && semproResult) {
-            semproData = semproResult;
-          }
-        }
-        
-        setJadwal({
-          ...data,
-          mahasiswa: mahasiswaError ? null : mahasiswaData,
-          sempro: semproData || data.sempro
-        } as JadwalSempro);
-        
-      } catch (error) {
-        console.error('Unexpected error:', error);
-        setIsError(true);
-        setErrorMessage('Terjadi kesalahan saat memuat data jadwal');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    
-    if (params.id) {
-      fetchJadwal();
-    }
-  }, [params.id]);
 
   // Handle edit navigation for admin
   const handleEdit = () => {
@@ -154,7 +74,7 @@ export default function JadwalSemproDetailPage({ params }: { params: { id: strin
         <div className="flex flex-col items-center justify-center py-12">
           <h1 className="text-2xl font-semibold text-gray-900 mb-4">Error</h1>
           <p className="text-red-500">
-            {errorMessage || 'Gagal memuat data jadwal seminar proposal'}
+            {error instanceof Error ? error.message : 'Gagal memuat data jadwal seminar proposal'}
           </p>
         </div>
       </div>
