@@ -283,6 +283,7 @@ export default function SemproPage() {
             semproList={semproData || []} 
             userRole={userRole}
             isLoading={isLoading}
+            showRejectionDetail={true}
           />
           
           {/* Period notice */}

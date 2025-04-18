@@ -42,18 +42,6 @@ export function SemproList({
     return timeString.substring(0, 5); // Format: HH:mm
   };
 
-  // Function for console logging - for debugging
-  const debugLog = (data: any, label: string) => {
-    console.log(`DEBUG ${label}:`, data);
-  };
-
-  // Log list data for debugging
-  React.useEffect(() => {
-    if (semproList && semproList.length > 0) {
-      debugLog(semproList[0], 'First item in semproList');
-    }
-  }, [semproList]);
-
   if (isLoading) {
     return (
       <Card>
@@ -190,7 +178,6 @@ export function SemproList({
             {(semproList as Sempro[]).map((sempro) => (
               <TableRow key={sempro.id}>
                 <TableCell>
-                  {/* Perbaikan: Menggunakan sempro.tanggal sesuai dengan schema database */}
                   {formatDate(sempro.tanggal)}
                 </TableCell>
                 

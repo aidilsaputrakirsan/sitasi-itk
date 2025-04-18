@@ -82,10 +82,17 @@ export function useAllSempros() {
             if (statusForFrontend === 'evaluated') {
               statusForFrontend = 'verified';
             }
-            
+
+            // Log untuk debugging
+            console.log(`Checking rejection for sempro ${sempro.id}:`, {
+              hasRiwayatDitolak: riwayatData && riwayatData.length > 0,
+              riwayatData
+            });
+
             // Cek apakah ada catatan penolakan
             if (!riwayatError && riwayatData && riwayatData.length > 0) {
               statusForFrontend = 'rejected';
+              console.log(`Sempro ${sempro.id} diubah ke status rejected karena memiliki riwayat DITOLAK`);
             }
             
             return {
@@ -164,8 +171,11 @@ export function useStudentSempros() {
             
             return {
               ...sempro,
-              status: statusForFrontend
+              status: statusForFrontend,
+              rejection_reason: riwayatData && riwayatData.length > 0 ? 
+                riwayatData[0].keterangan?.replace('DITOLAK: ', '') : null
             };
+            
           } catch (err) {
             console.error(`Error enhancing sempro ID ${sempro.id}:`, err);
             return sempro;
