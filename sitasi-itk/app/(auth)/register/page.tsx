@@ -23,6 +23,7 @@ type RegisterFormValues = z.infer<typeof registerSchema>;
 export default function RegisterPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [verificationSent, setVerificationSent] = useState(false);
   const router = useRouter();
   const { register: registerUser } = useAuth();
 
@@ -37,8 +38,10 @@ export default function RegisterPage() {
     },
   });
 
+  // Modifikasi di sitasi-itk/app/(auth)/register/page.tsx
+  // Pada fungsi onSubmit
   const onSubmit = async (data: RegisterFormValues) => {
-    if (isSubmitting) return; // Prevent multiple submissions
+    if (isSubmitting) return;
     setIsSubmitting(true);
     setError(null);
 
@@ -51,22 +54,27 @@ export default function RegisterPage() {
         role: data.role as UserRole,
       };
 
+      console.log('Mencoba mendaftar dengan data:', {
+        ...credentials, 
+        password: '[DISEMBUNYIKAN]'
+      });
+
       const { error, user } = await registerUser(credentials);
 
       if (error) {
-        setError(error.message);
+        console.error('Error registrasi:', error);
+        setError('Terjadi kesalahan: ' + error.message);
         setIsSubmitting(false);
         return;
       }
 
-      // Redirect to dashboard
-      router.push('/dashboard');
+      // Tampilkan pesan verifikasi
+      setVerificationSent(true);
     } catch (err) {
       console.error('Registration error:', err);
-      setError('Terjadi kesalahan saat pendaftaran');
+      setError('Terjadi kesalahan tak terduga saat pendaftaran. Silakan coba lagi nanti.');
       setIsSubmitting(false);
     } finally {
-      // Add a small delay before allowing resubmission
       setTimeout(() => {
         setIsSubmitting(false);
       }, 1000);
@@ -84,112 +92,128 @@ export default function RegisterPage() {
             Sistem Informasi Tugas Akhir - Institut Teknologi Kalimantan
           </p>
         </div>
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit(onSubmit)}>
-          <div className="rounded-md shadow-sm space-y-4">
-            <div>
-              <label htmlFor="name" className="block text-sm font-medium text-gray-700">
-                Nama Lengkap
-              </label>
-              <input
-                id="name"
-                type="text"
-                {...register('name')}
-                className="mt-1 appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
-              />
-              {errors.name && (
-                <p className="text-red-500 text-xs mt-1">{errors.name.message}</p>
-              )}
-            </div>
-
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-                Email
-              </label>
-              <input
-                id="email"
-                type="email"
-                {...register('email')}
-                className="mt-1 appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
-              />
-              {errors.email && (
-                <p className="text-red-500 text-xs mt-1">{errors.email.message}</p>
-              )}
-            </div>
-
-            <div>
-              <label htmlFor="username" className="block text-sm font-medium text-gray-700">
-                NIM/NIP
-              </label>
-              <input
-                id="username"
-                type="text"
-                {...register('username')}
-                className="mt-1 appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
-              />
-              {errors.username && (
-                <p className="text-red-500 text-xs mt-1">{errors.username.message}</p>
-              )}
-            </div>
-
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-                Password
-              </label>
-              <input
-                id="password"
-                type="password"
-                {...register('password')}
-                className="mt-1 appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
-              />
-              {errors.password && (
-                <p className="text-red-500 text-xs mt-1">{errors.password.message}</p>
-              )}
-            </div>
-
-            <div>
-              <label htmlFor="role" className="block text-sm font-medium text-gray-700">
-                Peran
-              </label>
-              <select
-                id="role"
-                {...register('role')}
-                className="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
-              >
-                <option value="mahasiswa">Mahasiswa</option>
-                <option value="dosen">Dosen</option>
-                {/* Admin roles removed from dropdown */}
-              </select>
-              {errors.role && (
-                <p className="text-red-500 text-xs mt-1">{errors.role.message}</p>
-              )}
-            </div>
-          </div>
-
-          {error && (
-            <div className="bg-red-50 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
-              <span className="block sm:inline">{error}</span>
-            </div>
-          )}
-
-          <div>
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
-            >
-              {isSubmitting ? 'Loading...' : 'Daftar'}
-            </button>
-          </div>
-
-          <div className="text-center">
-            <p className="text-sm text-gray-600">
-              Sudah punya akun?{' '}
-              <Link href="/login" className="font-medium text-primary-600 hover:text-primary-500">
-                Login disini
-              </Link>
+        
+        {verificationSent ? (
+          <div className="bg-green-50 border border-green-400 text-green-700 px-4 py-3 rounded relative" role="alert">
+            <p className="font-bold">Pendaftaran Berhasil!</p>
+            <p className="block sm:inline mb-2">
+              Silakan periksa email Anda untuk melakukan verifikasi akun. 
+              Anda perlu mengkonfirmasi email sebelum dapat login ke sistem.
             </p>
+            <div className="mt-4">
+              <Link href="/login" className="font-medium text-primary-600 hover:text-primary-500">
+                Kembali ke halaman login
+              </Link>
+            </div>
           </div>
-        </form>
+        ) : (
+          <form className="mt-8 space-y-6" onSubmit={handleSubmit(onSubmit)}>
+            <div className="rounded-md shadow-sm space-y-4">
+              <div>
+                <label htmlFor="name" className="block text-sm font-medium text-gray-700">
+                  Nama Lengkap
+                </label>
+                <input
+                  id="name"
+                  type="text"
+                  {...register('name')}
+                  className="mt-1 appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
+                />
+                {errors.name && (
+                  <p className="text-red-500 text-xs mt-1">{errors.name.message}</p>
+                )}
+              </div>
+
+              <div>
+                <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+                  Email
+                </label>
+                <input
+                  id="email"
+                  type="email"
+                  {...register('email')}
+                  className="mt-1 appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
+                />
+                {errors.email && (
+                  <p className="text-red-500 text-xs mt-1">{errors.email.message}</p>
+                )}
+              </div>
+
+              <div>
+                <label htmlFor="username" className="block text-sm font-medium text-gray-700">
+                  NIM/NIP
+                </label>
+                <input
+                  id="username"
+                  type="text"
+                  {...register('username')}
+                  className="mt-1 appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
+                />
+                {errors.username && (
+                  <p className="text-red-500 text-xs mt-1">{errors.username.message}</p>
+                )}
+              </div>
+
+              <div>
+                <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+                  Password
+                </label>
+                <input
+                  id="password"
+                  type="password"
+                  {...register('password')}
+                  className="mt-1 appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
+                />
+                {errors.password && (
+                  <p className="text-red-500 text-xs mt-1">{errors.password.message}</p>
+                )}
+              </div>
+
+              <div>
+                <label htmlFor="role" className="block text-sm font-medium text-gray-700">
+                  Peran
+                </label>
+                <select
+                  id="role"
+                  {...register('role')}
+                  className="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
+                >
+                  <option value="mahasiswa">Mahasiswa</option>
+                  <option value="dosen">Dosen</option>
+                  {/* Admin roles removed from dropdown */}
+                </select>
+                {errors.role && (
+                  <p className="text-red-500 text-xs mt-1">{errors.role.message}</p>
+                )}
+              </div>
+            </div>
+
+            {error && (
+              <div className="bg-red-50 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
+                <span className="block sm:inline">{error}</span>
+              </div>
+            )}
+
+            <div>
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+              >
+                {isSubmitting ? 'Loading...' : 'Daftar'}
+              </button>
+            </div>
+
+            <div className="text-center">
+              <p className="text-sm text-gray-600">
+                Sudah punya akun?{' '}
+                <Link href="/login" className="font-medium text-primary-600 hover:text-primary-500">
+                  Login disini
+                </Link>
+              </p>
+            </div>
+          </form>
+        )}
       </div>
     </div>
   );

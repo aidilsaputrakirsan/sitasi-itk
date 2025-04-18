@@ -299,7 +299,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             role: credentials.role,
             username: credentials.username || null,
             email: credentials.email
-          }
+          },
+          emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL || window.location.origin}/login`
         }
       });
 
@@ -310,80 +311,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       console.log('Auth signup successful, user created:', data.user?.id);
-
-      // Only attempt profile creation if user was created
-      if (data.user && data.user.id) {
-        try {
-          // Create the main profile
-          const { error: profileError } = await supabase
-            .from('profiles')
-            .insert([
-              {
-                id: data.user.id,
-                name: credentials.name,
-                username: credentials.username || null,
-                roles: [credentials.role]
-              }
-            ]);
-
-          if (profileError) {
-            console.error('Error creating profile:', profileError);
-            throw profileError; // Throw error to trigger deletion of auth user
-          }
-          
-          console.log('Main profile created successfully');
-          
-          // Create role-specific profile - CRITICAL PART
-          try {
-            if (credentials.role === 'mahasiswa') {
-              await createMahasiswaProfile(data.user.id, {
-                name: credentials.name, 
-                username: credentials.username,
-                email: credentials.email
-              });
-            } else if (credentials.role === 'dosen') {
-              // Memastikan data masuk ke tabel dosens
-              await createDosenProfile(data.user.id, {
-                name: credentials.name, 
-                username: credentials.username,
-                email: credentials.email
-              });
-            } else if (credentials.role === 'tendik' || credentials.role === 'koorpro') {
-              await createTendikProfile(data.user.id, {
-                name: credentials.name,
-                username: credentials.username,
-                email: credentials.email,
-                role: credentials.role
-              });
-            }
-          } catch (roleError) {
-            console.error("Error creating role-specific profile:", roleError);
-            // Don't continue - throw error to rollback
-            throw roleError;
-          }
-        } catch (insertError) {
-          console.error('Error in profile creation process:', insertError);
-          
-          // Try to delete the auth user to clean up
-          try {
-            // Gunakan admin functions jika ada, atau bisa menggunakan trigger database
-            console.error('Failed to create required profiles, this will leave orphaned auth user');
-          } catch (cleanupError) {
-            console.error('Error during cleanup:', cleanupError);
-          }
-          
-          throw insertError; // Re-throw to handle in outer catch
-        }
-      }
-
-      // Get the user profile
-      const profile = data.user ? await getProfile() : null;
-      console.log('Registration complete, profile:', profile);
       
+      // Implementasi yang lebih sederhana yang hanya mengandalkan trigger database
       setState(prevState => ({
         ...prevState,
-        session: data.session,
-        user: profile,
         isLoading: false,
         error: null
       }));

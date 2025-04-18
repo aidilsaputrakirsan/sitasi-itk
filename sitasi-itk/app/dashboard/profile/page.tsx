@@ -165,6 +165,7 @@ export default function ProfilePage() {
               
               if (user.name) setStudentValue('nama', user.name);
               if (user.email) setStudentValue('email', user.email);
+              if (user.username) setStudentValue('nim', user.username);
             }
           } catch (error) {
             console.error('Error in mahasiswa profile check:', error);
@@ -205,6 +206,7 @@ export default function ProfilePage() {
               
               if (user.name) setDosenValue('nama_dosen', user.name);
               if (user.email) setDosenValue('email', user.email);
+              if (user.username) setDosenValue('nip', user.username);
             }
           } catch (error) {
             console.error('Error in dosen profile check:', error);
