@@ -289,7 +289,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.log('Starting registration for:', credentials.email);
       setState(prevState => ({ ...prevState, isLoading: true, error: null }));
       
-      // Register user with Supabase Auth
+      // Register user with Supabase Auth dengan opsi minimal
       const { data, error } = await supabase.auth.signUp({
         email: credentials.email,
         password: credentials.password,
@@ -297,28 +297,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           data: {
             name: credentials.name,
             role: credentials.role,
-            username: credentials.username || null,
-            email: credentials.email
+            username: credentials.username
           },
-          emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL || window.location.origin}/login`
+          emailRedirectTo: `${window.location.origin}/login`
         }
       });
-
+  
       if (error) {
         console.error('Registration auth error:', error);
         setState(prevState => ({ ...prevState, error: error as unknown as Error, isLoading: false }));
         return { error: error as unknown as Error, user: null };
       }
-
+  
       console.log('Auth signup successful, user created:', data.user?.id);
       
-      // Implementasi yang lebih sederhana yang hanya mengandalkan trigger database
-      setState(prevState => ({
-        ...prevState,
-        isLoading: false,
-        error: null
-      }));
-
+      // Set state dan return
+      setState({ ...state, isLoading: false });
       return { error: null, user: data.user };
     } catch (error) {
       console.error("Unexpected error in register:", error);

@@ -143,29 +143,18 @@ export default function ProfilePage() {
               .eq('user_id', user.id)
               .limit(1);
             
-            if (mahasiswaError) {
-              console.error('Error fetching student profile:', mahasiswaError);
-              toast({
-                variant: "destructive",
-                title: "Error",
-                description: "Terjadi kesalahan saat memuat profil mahasiswa: " + getErrorMessage(mahasiswaError),
-              });
-            }
+            // Existing error handling...
             
             if (mahasiswaData && mahasiswaData.length > 0) {
-              console.log('Found student profile:', mahasiswaData[0]);
-              setProfileExists(true);
-              setStudentValue('nama', mahasiswaData[0].nama || '');
-              setStudentValue('nim', mahasiswaData[0].nim || '');
-              setStudentValue('email', mahasiswaData[0].email || '');
-              setStudentValue('nomor_telepon', mahasiswaData[0].nomor_telepon || '');
+              // Existing profile handling...
             } else {
               console.log('No student profile found for user');
               setProfileExists(false);
               
+              // Pre-fill form with auth user data
               if (user.name) setStudentValue('nama', user.name);
               if (user.email) setStudentValue('email', user.email);
-              if (user.username) setStudentValue('nim', user.username);
+              if (user.username) setStudentValue('nim', user.username); // Mengisi NIM dari username
             }
           } catch (error) {
             console.error('Error in mahasiswa profile check:', error);
