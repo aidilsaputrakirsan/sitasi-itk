@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { SemproStatusBadge } from "@/components/sempro/SemproStatusBadge";
 import { StatusSempro } from "@/types/sempro"; // Import dari types/sempro.ts
 
+// app/dashboard/sempro/penilaian/columns.tsx - perbaikan tipe data SemproListItem
 export type SemproListItem = {
   id: string;
   pengajuan_ta?: {
@@ -24,6 +25,7 @@ export type SemproListItem = {
   status: string;
   semproId?: string;
   isPenilaianSubmitted?: boolean;
+  sempro?: { id: string; status: string }; // Tambahkan property sempro
 };
 
 // Helper function untuk validasi status
@@ -95,14 +97,17 @@ export const columns: ColumnDef<SemproListItem>[] = [
       const data = row.original;
       const router = useRouter();
       
-      if (!data.semproId) {
+      // Check semproId dengan lebih fleksibel
+      const semproId = data.semproId || (data.sempro && data.sempro.id);
+      
+      if (!semproId) {
         return <span className="text-gray-500">Belum terdaftar sempro</span>;
       }
       
       return (
         <div className="flex space-x-2">
           <Button 
-            onClick={() => router.push(`/dashboard/sempro/penilaian/${data.semproId}`)}
+            onClick={() => router.push(`/dashboard/sempro/penilaian/${semproId}`)}
             variant={data.isPenilaianSubmitted ? "outline" : "default"}
           >
             {data.isPenilaianSubmitted ? "Edit Nilai" : "Nilai Sempro"}

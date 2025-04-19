@@ -1,9 +1,10 @@
+// app/dashboard/sempro/jadwal/page.tsx - file baru yang benar
 'use client';
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { SemproList } from '@/components/sempro/SemproList';
-import { useAllJadwalSempros } from '@/hooks/useSempro'; // Ubah ke hook baru
+import { useAllJadwalSempros, useDosenJadwalSempros } from '@/hooks/useSempro';
 import { UserRole } from '@/types/auth';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
@@ -30,24 +31,27 @@ export default function JadwalSemproPage() {
     }
   }, [user]);
   
-  // Gunakan hook baru untuk data jadwal
-  const { data: jadwalData, isLoading } = useAllJadwalSempros();
+  // Gunakan hook yang sesuai berdasarkan role
+  const { data: adminJadwalData, isLoading: isAdminLoading } = useAllJadwalSempros();
+  const { data: dosenJadwalData, isLoading: isDosenLoading } = useDosenJadwalSempros();
   
-  // Tambahkan filter untuk jadwal berdasarkan peran
-  let filteredJadwalData = jadwalData || [];
-
-  // Filter for dosen: only show jadwal where they are penguji
-  if (userRole === 'dosen' && user) {
-    filteredJadwalData = filteredJadwalData.filter(j => 
-      j.penguji_1 === user.id || j.penguji_2 === user.id
-    );
-  }
-
-  // Filter for mahasiswa: only show published jadwal or their own jadwal
-  if (userRole === 'mahasiswa' && user) {
-    filteredJadwalData = filteredJadwalData.filter(j => 
-      j.is_published || j.user_id === user.id
-    );
+  // Pilih data berdasarkan role
+  let filteredJadwalData: JadwalSempro[] = [];
+  let isLoading = false;
+  
+  if (userRole === 'dosen') {
+    filteredJadwalData = dosenJadwalData || [];
+    isLoading = isDosenLoading;
+  } else {
+    filteredJadwalData = adminJadwalData || [];
+    isLoading = isAdminLoading;
+    
+    // Filter for mahasiswa: only show published jadwal or their own jadwal
+    if (userRole === 'mahasiswa' && user) {
+      filteredJadwalData = filteredJadwalData.filter((j: JadwalSempro) => 
+        j.is_published || j.user_id === user.id
+      );
+    }
   }
   
   // For filtering (mostly for dosen view to only see future jadwal)
@@ -56,14 +60,14 @@ export default function JadwalSemproPage() {
   
   // Filter future and past jadwal menggunakan filteredJadwalData
   const futureJadwal = filteredJadwalData
-    .filter(j => {
+    .filter((j: JadwalSempro) => {
       const seminarDate = new Date(j.tanggal_sempro);
       seminarDate.setHours(0, 0, 0, 0);
       return seminarDate >= today;
     });
     
   const pastJadwal = filteredJadwalData
-    .filter(j => {
+    .filter((j: JadwalSempro) => {
       const seminarDate = new Date(j.tanggal_sempro);
       seminarDate.setHours(0, 0, 0, 0);
       return seminarDate < today;
@@ -79,7 +83,7 @@ export default function JadwalSemproPage() {
           <h1 className="text-2xl font-semibold text-gray-900">Jadwal Seminar Proposal</h1>
           <p className="text-sm text-gray-500 mt-1">
             {userRole === 'dosen' 
-              ? 'Daftar jadwal seminar proposal dimana Anda terlibat sebagai penguji' 
+              ? 'Daftar jadwal seminar proposal dimana Anda terlibat sebagai penguji atau pembimbing' 
               : userRole === 'mahasiswa'
                 ? 'Jadwal seminar proposal yang tersedia'
                 : 'Kelola jadwal seminar proposal'}
@@ -132,7 +136,7 @@ export default function JadwalSemproPage() {
             <div className="flex flex-col items-center justify-center py-8">
               <p className="text-gray-500 mb-4">
                 {userRole === 'dosen' 
-                  ? 'Anda belum dijadwalkan sebagai penguji seminar proposal.'
+                  ? 'Anda belum dijadwalkan sebagai penguji atau pembimbing seminar proposal.'
                   : userRole === 'mahasiswa'
                     ? 'Belum ada jadwal seminar proposal yang tersedia.'
                     : 'Belum ada jadwal seminar proposal yang dibuat.'}

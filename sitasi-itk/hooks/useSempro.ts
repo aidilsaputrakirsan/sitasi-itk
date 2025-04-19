@@ -276,17 +276,18 @@ export function useDosenSempros() {
                 .select('nama, nim, email, nomor_telepon')
                 .eq('user_id', jadwal.user_id)
                 .single();
-                
+                  
               // Get sempro data
               const { data: semproData } = await supabase
                 .from('sempros')
                 .select('*')
                 .eq('pengajuan_ta_id', jadwal.pengajuan_ta_id)
                 .eq('user_id', jadwal.user_id)
-                .single();
+                .maybeSingle(); // Gunakan maybeSingle() daripada single() untuk menghindari error
               
               // Check if dosen has already submitted penilaian
               let isPenilaianSubmitted = false;
+              
               if (semproData) {
                 const { data: penilaianData } = await supabase
                   .from('penilaian_sempros')
@@ -301,6 +302,7 @@ export function useDosenSempros() {
                 ...jadwal,
                 mahasiswa: mahasiswaData || null,
                 sempro: semproData || null,
+                semproId: semproData?.id, // Pastikan selalu ada semproId jika semproData ada
                 isPenilaianSubmitted,
                 tipe: 'penguji'
               };
@@ -361,7 +363,6 @@ export function useDosenSempros() {
   });
 }
 
-// Fetch all jadwal sempros
 // Fetch all jadwal sempros
 export function useAllJadwalSempros() {
   const { user } = useAuth();
@@ -2572,3 +2573,135 @@ export function useSubmitSemproRevision() {
   });
 }
 
+export function useDosenJadwalSempros() {
+  const { user } = useAuth();
+  
+  return useQuery({
+    queryKey: ['jadwal-sempros', 'dosen-all', user?.id],
+    queryFn: async () => {
+      if (!user) return [];
+      
+      try {
+        console.log("Fetching jadwal sempros for dosen with user ID:", user.id);
+        
+        // 1. Dapatkan semua pengajuan TA dimana dosen sebagai pembimbing
+        const { data: pengajuanData, error: pengajuanError } = await supabase
+          .from('pengajuan_tas')
+          .select('id')
+          .or(`pembimbing_1.eq.${user.id},pembimbing_2.eq.${user.id}`);
+          
+        if (pengajuanError) {
+          console.error("Error fetching pengajuan as pembimbing:", pengajuanError);
+        }
+        
+        // Buat array ID pengajuan
+        const pembimbingPengajuanIds = pengajuanData && pengajuanData.length > 0 
+          ? pengajuanData.map(p => p.id) 
+          : [];
+        
+        // 2. Dapatkan jadwal berdasarkan: dosen sebagai penguji ATAU pengajuan sebagai pembimbing
+        let query = supabase
+          .from('jadwal_sempros')
+          .select(`
+            *,
+            pengajuan_ta:pengajuan_ta_id(id, judul, bidang_penelitian)
+          `);
+        
+        // Buat filter gabungan
+        let filterConditions = [];
+        
+        // Tambahkan filter sebagai penguji
+        filterConditions.push(`penguji_1.eq.${user.id}`);
+        filterConditions.push(`penguji_2.eq.${user.id}`);
+        
+        // Tambahkan filter pengajuan jika ada
+        if (pembimbingPengajuanIds.length > 0) {
+          const pengajuanFilter = `pengajuan_ta_id.in.(${pembimbingPengajuanIds.join(',')})`;
+          filterConditions.push(pengajuanFilter);
+        }
+        
+        // Terapkan filter
+        query = query.or(filterConditions.join(','));
+        
+        // Hanya ambil yang dipublikasikan dan urutkan berdasarkan tanggal
+        const { data, error } = await query
+          .eq('is_published', true)
+          .order('tanggal_sempro', { ascending: false });
+        
+        if (error) {
+          console.error("Error fetching jadwal sempros:", error);
+          throw error;
+        }
+        
+        // 3. Enhance data dengan mahasiswa dan penguji
+        const enhancedData = await Promise.all(data.map(async (jadwal) => {
+          try {
+            // Get mahasiswa data
+            const { data: mahasiswaData, error: mahasiswaError } = await supabase
+              .from('mahasiswas')
+              .select('nama, nim, email, nomor_telepon')
+              .eq('user_id', jadwal.user_id)
+              .single();
+            
+            // Get penguji 1 data
+            const { data: penguji1Data, error: penguji1Error } = await supabase
+              .from('dosens')
+              .select('nama_dosen, nip, email')
+              .eq('user_id', jadwal.penguji_1)
+              .maybeSingle();
+            
+            // Get penguji 2 data
+            const { data: penguji2Data, error: penguji2Error } = await supabase
+              .from('dosens')
+              .select('nama_dosen, nip, email')
+              .eq('user_id', jadwal.penguji_2)
+              .maybeSingle();
+              
+            // Get sempro data
+            const { data: semproData, error: semproError } = await supabase
+              .from('sempros')
+              .select('*')
+              .eq('pengajuan_ta_id', jadwal.pengajuan_ta_id)
+              .eq('user_id', jadwal.user_id)
+              .maybeSingle();
+            
+            // Cek apakah jadwal ini adalah milik pembimbing
+            const isPembimbing = pembimbingPengajuanIds.includes(jadwal.pengajuan_ta_id);
+            
+            return {
+              ...jadwal,
+              mahasiswa: mahasiswaError ? null : mahasiswaData,
+              penguji1: {
+                nama_dosen: penguji1Data?.nama_dosen || 'Penguji 1', 
+                nip: penguji1Data?.nip || '',
+                email: penguji1Data?.email || ''
+              },
+              penguji2: {
+                nama_dosen: penguji2Data?.nama_dosen || 'Penguji 2',
+                nip: penguji2Data?.nip || '',
+                email: penguji2Data?.email || ''
+              },
+              sempro: semproError ? null : semproData,
+              semproId: semproData?.id, // Tambahkan explicit semproId field
+              isPembimbing: isPembimbing, // Flag untuk UI
+              dosenRole: isPembimbing ? (
+                jadwal.penguji_1 === user.id || jadwal.penguji_2 === user.id 
+                  ? 'Penguji & Pembimbing' 
+                  : 'Pembimbing'
+              ) : 'Penguji'
+            };
+          } catch (err) {
+            console.error(`Error enhancing jadwal ID ${jadwal.id}:`, err);
+            return jadwal;
+          }
+        }));
+        
+        return enhancedData;
+      } catch (error) {
+        console.error("Error in useDosenJadwalSempros:", error);
+        return [];
+      }
+    },
+    enabled: !!user && user.roles.includes('dosen'),
+  });
+}
