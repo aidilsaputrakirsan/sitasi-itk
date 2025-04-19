@@ -124,7 +124,7 @@ export default function DashboardLayout({
       { name: 'Data Mahasiswa', href: '/dashboard/data-mahasiswa', icon: <UserIcon /> },
       { name: 'Data Dosen', href: '/dashboard/data-dosen', icon: <UserIcon /> },
       { name: 'Pengajuan TA', href: '/dashboard/pengajuan', icon: <DocumentIcon /> }, // Changed from '/dashboard/data-pengajuan'
-      { name: 'Periode', href: '/dashboard/periode', icon: <CalendarIcon /> },
+      { name: 'Periode', href: '/dashboard/sempro/periode', icon: <CalendarIcon /> },
       { name: 'Jadwal Sempro', href: '/dashboard/sempro', icon: <CalendarIcon /> },
       { name: 'Jadwal Sidang', href: '/dashboard/kelola-sidang', icon: <CalendarIcon /> },
       { name: 'Katalog TA', href: '/dashboard/kelola-katalog', icon: <BookOpenIcon /> },

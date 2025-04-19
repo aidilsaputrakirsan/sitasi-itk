@@ -37,8 +37,9 @@ export default function EditPeriodeSemproPage({ params }: { params: { id: string
     const fetchPeriode = async () => {
       setIsLoading(true);
       try {
+        // Fixed: use 'periodes' table instead of 'periode_sempros'
         const { data, error } = await supabase
-          .from('periode_sempros')
+          .from('periodes')
           .select('*')
           .eq('id', params.id)
           .single();
@@ -53,10 +54,11 @@ export default function EditPeriodeSemproPage({ params }: { params: { id: string
           return;
         }
         
+        // Fixed: map the database columns to the form values correctly
         setPeriode({
           nama_periode: data.nama_periode,
-          tanggal_mulai: data.tanggal_mulai,
-          tanggal_selesai: data.tanggal_selesai,
+          tanggal_mulai: data.mulai_daftar,
+          tanggal_selesai: data.selesai_daftar,
           is_active: data.is_active
         });
       } catch (error) {
