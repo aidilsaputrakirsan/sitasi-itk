@@ -1,116 +1,114 @@
+// app/dashboard/sempro/penilaian/columns.tsx
 "use client";
 
+import { ColumnDef } from "@tanstack/react-table";
 import { Button } from "@/components/ui/button";
-import { SemproStatusBadge } from "@/components/sempro/SemproStatusBadge";
 import { useRouter } from "next/navigation";
-import { Sempro, JadwalSempro, StatusSempro } from "@/types/sempro";
+import { SemproStatusBadge } from "@/components/sempro/SemproStatusBadge";
+import { StatusSempro } from "@/types/sempro"; // Import dari types/sempro.ts
 
-// Definisi type untuk data row
-interface RowData {
-  original: Sempro | JadwalSempro | {
-    mahasiswa?: { nama?: string; nim?: string };
-    sempro?: Sempro;
-    pengajuan_ta?: { judul?: string };
-    status?: string;
-    isPenilaianSubmitted?: boolean;
+export type SemproListItem = {
+  id: string;
+  pengajuan_ta?: {
+    id: string;
+    judul: string;
+    bidang_penelitian: string;
   };
-}
+  mahasiswa?: {
+    nama: string;
+    nim: string;
+  };
+  tanggal: string;
+  ruangan: string;
+  waktu: string;
+  status: string;
+  semproId?: string;
+  isPenilaianSubmitted?: boolean;
+};
 
-export const columns = [
-  {
-    accessorKey: "mahasiswa.nama",
-    header: "Nama Mahasiswa",
-    cell: ({ row }: { row: RowData }) => {
-      const mahasiswa = row.original.mahasiswa ||
-                        (row.original as any).sempro?.mahasiswa;
-      return <div>{mahasiswa?.nama || '-'}</div>;
-    },
-  },
-  {
-    accessorKey: "mahasiswa.nim",
-    header: "NIM",
-    cell: ({ row }: { row: RowData }) => {
-      const mahasiswa = row.original.mahasiswa ||
-                        (row.original as any).sempro?.mahasiswa;
-      return <div>{mahasiswa?.nim || '-'}</div>;
-    },
-  },
+// Helper function untuk validasi status
+const getValidStatus = (status: string): StatusSempro => {
+  // Daftar nilai yang valid untuk StatusSempro berdasarkan definisi type
+  const validStatusValues: StatusSempro[] = [
+    'registered', 
+    'evaluated', 
+    'verified',
+    'scheduled', 
+    'completed', 
+    'revision_required',
+    'rejected',
+    'approved'
+  ];
+  
+  // Cek apakah nilai status valid, jika tidak gunakan default
+  return validStatusValues.includes(status as StatusSempro) 
+    ? status as StatusSempro 
+    : 'registered';
+};
+
+export const columns: ColumnDef<SemproListItem>[] = [
   {
     accessorKey: "pengajuan_ta.judul",
-    header: "Judul Proposal",
-    cell: ({ row }: { row: RowData }) => {
-      let judul = "";
-      
-      // Coba ambil judul dari berbagai struktur data yang mungkin
-      if (row.original.pengajuan_ta?.judul) {
-        judul = row.original.pengajuan_ta.judul;
-      } else if ((row.original as any).sempro?.pengajuan_ta?.judul) {
-        judul = (row.original as any).sempro.pengajuan_ta.judul;
-      } else if (row.original.sempro) {
-        // Jika sempro ada, coba ambil judul dari pengajuan_ta_id
-        const pengajuanId = (row.original.sempro as any).pengajuan_ta_id;
-        if (pengajuanId) {
-          // Untuk logging dan debugging
-          console.log("Mencoba mendapatkan judul dari pengajuan_ta_id:", pengajuanId);
-        }
-      }
-      
-      return <div className="max-w-md truncate">{judul || '-'}</div>;
-    },
+    header: "Judul TA",
+    cell: ({ row }) => {
+      const data = row.original;
+      return data.pengajuan_ta?.judul || "-";
+    }
+  },
+  {
+    accessorKey: "mahasiswa.nama",
+    header: "Mahasiswa",
+    cell: ({ row }) => {
+      const data = row.original;
+      return (
+        <div>
+          <div>{data.mahasiswa?.nama || "-"}</div>
+          <div className="text-sm text-gray-500">{data.mahasiswa?.nim || "-"}</div>
+        </div>
+      );
+    }
+  },
+  {
+    accessorKey: "tanggal",
+    header: "Tanggal",
+  },
+  {
+    accessorKey: "waktu",
+    header: "Waktu",
+  },
+  {
+    accessorKey: "ruangan",
+    header: "Ruangan",
   },
   {
     accessorKey: "status",
     header: "Status",
-    cell: ({ row }: { row: RowData }) => {
-      let status;
-      // Determine status from the complex data structure
-      if ('status' in row.original && row.original.status) {
-        status = row.original.status;
-      } else if ('sempro' in row.original && row.original.sempro && 'status' in row.original.sempro) {
-        status = row.original.sempro.status;
-      } else {
-        status = 'registered'; // Default fallback
-      }
-      
-      // Define valid status values for type safety
-      const validStatuses: StatusSempro[] = [
-        'registered', 'evaluated', 'verified', 'scheduled', 
-        'completed', 'revision_required', 'rejected', 'approved'
-      ];
-      
-      // Validate and ensure we return a valid StatusSempro type
-      const validStatus = validStatuses.includes(status as StatusSempro) 
-        ? (status as StatusSempro) 
-        : ('registered' as StatusSempro);
-        
-      return <SemproStatusBadge status={validStatus} />;
-    },
+    cell: ({ row }) => {
+      const status = row.original.status;
+      return <SemproStatusBadge status={getValidStatus(status)} />;
+    }
   },
   {
     id: "actions",
     header: "Aksi",
-    cell: ({ row }: { row: RowData }) => {
+    cell: ({ row }) => {
+      const data = row.original;
       const router = useRouter();
-      const sempro = (row.original as any).sempro || row.original;
-      const id = sempro.id;
-      const isPenilaianSubmitted = (row.original as any).isPenilaianSubmitted;
+      
+      if (!data.semproId) {
+        return <span className="text-gray-500">Belum terdaftar sempro</span>;
+      }
       
       return (
         <div className="flex space-x-2">
           <Button 
-            variant={isPenilaianSubmitted ? "outline" : "default"}
-            onClick={() => router.push(`/dashboard/sempro/penilaian/${id}`)}
+            onClick={() => router.push(`/dashboard/sempro/penilaian/${data.semproId}`)}
+            variant={data.isPenilaianSubmitted ? "outline" : "default"}
           >
-            {isPenilaianSubmitted ? "Lihat Penilaian" : "Nilai Sempro"}
-          </Button>
-          <Button 
-            variant="outline"
-            onClick={() => router.push(`/dashboard/sempro/request-revision/${id}`)}
-          >
-            Revisi
+            {data.isPenilaianSubmitted ? "Edit Nilai" : "Nilai Sempro"}
           </Button>
         </div>
       );
-    },
-  },
+    }
+  }
 ];
