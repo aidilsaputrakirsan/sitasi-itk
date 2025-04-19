@@ -27,6 +27,33 @@ import { useGoogleDriveStorage } from '@/hooks/useGoogleDriveStorage';
 // Google Drive folder ID untuk menyimpan dokumen sempro
 const SEMPRO_FOLDER_ID = process.env.NEXT_PUBLIC_SEMPRO_FOLDER_ID || '1y-4qBRLQnkLezBcYYf_N6kMxqaUXa6Lx';
 
+// Helper function untuk safely access pengajuan_ta
+// Tambahkan fungsi ini di bagian awal hooks/useSempro.ts
+
+// Helper function to safely access pengajuan_ta properties
+function getPengajuanTaValue(pengajuanTa: any, propertyName: string): any {
+  if (!pengajuanTa) return null;
+  
+  // Handle if pengajuan_ta is an array
+  if (Array.isArray(pengajuanTa) && pengajuanTa.length > 0) {
+    return pengajuanTa[0][propertyName];
+  }
+  
+  // Handle if pengajuan_ta is an object
+  if (typeof pengajuanTa === 'object') {
+    return pengajuanTa[propertyName];
+  }
+  
+  return null;
+}
+
+// Kemudian di fungsi-fungsi hooks yang bermasalah, gunakan helper ini:
+// Contoh:
+// const pembimbing1 = getPengajuanTaValue(semproData.pengajuan_ta, 'pembimbing_1');
+// if (pembimbing1 === user.id) {
+//   // do something
+// }
+
 // Fetch all sempros (for admin users)
 export function useAllSempros() {
   const { user } = useAuth();
@@ -1873,3 +1900,515 @@ export function useReviseSempro() {
     },
   });
 }
+
+// Tambahkan fungsi-fungsi berikut ke hooks/useSempro.ts
+
+// Request revision for a sempro
+export function useRequestSemproRevision() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const { user } = useAuth();
+  
+  return useMutation({
+    mutationFn: async ({ 
+      sempro_id, 
+      revision_text, 
+      is_major, 
+      require_ta012_revision,
+      require_plagiarism_revision,
+      require_draft_revision,
+      revision_type,
+      mahasiswa_id
+    }: { 
+      sempro_id: string;
+      revision_text: string;
+      is_major: boolean;
+      require_ta012_revision: boolean;
+      require_plagiarism_revision: boolean;
+      require_draft_revision: boolean;
+      revision_type: 'pembimbing' | 'penguji';
+      mahasiswa_id: string;
+    }) => {
+      if (!user) {
+        throw new Error('User not authenticated');
+      }
+      
+      try {
+        console.log("Requesting revision for sempro:", sempro_id);
+        
+        // Get dosen's full name for the revision record
+        const { data: profileData, error: profileError } = await supabase
+          .from('profiles')
+          .select('name')
+          .eq('id', user.id)
+          .single();
+        
+        if (profileError) {
+          console.error('Error fetching profile data:', profileError);
+          throw new Error('Failed to fetch dosen data');
+        }
+        
+        const dosenName = profileData?.name || 'Dosen';
+        
+        // First get the sempro detail to know which penguji/pembimbing number this is
+        const { data: semproData, error: semproError } = await supabase
+          .from('sempros')
+          .select(`
+            id, 
+            pengajuan_ta_id, 
+            pengajuan_ta:pengajuan_ta_id(pembimbing_1, pembimbing_2)
+          `)
+          .eq('id', sempro_id)
+          .single();
+        
+        if (semproError) {
+          console.error('Error fetching sempro data:', semproError);
+          throw new Error('Failed to fetch sempro data');
+        }
+        
+        // Next, get the jadwal to check penguji
+        const { data: jadwalData, error: jadwalError } = await supabase
+          .from('jadwal_sempros')
+          .select('penguji_1, penguji_2')
+          .eq('pengajuan_ta_id', semproData.pengajuan_ta_id)
+          .single();
+        
+        if (jadwalError && jadwalError.code !== 'PGRST116') {
+          console.error('Error fetching jadwal data:', jadwalError);
+          throw new Error('Failed to fetch jadwal data');
+        }
+        
+        // Determine which specific revisi field to update
+        let revisionField = '';
+
+        if (revision_type === 'pembimbing') {
+          // Check if user is pembimbing 1 or 2
+          const pembimbing1 = getPengajuanTaValue(semproData.pengajuan_ta, 'pembimbing_1');
+          const pembimbing2 = getPengajuanTaValue(semproData.pengajuan_ta, 'pembimbing_2');
+          
+          if (pembimbing1 === user.id) {
+            revisionField = 'revisi_pembimbing_1';
+          } else if (pembimbing2 === user.id) {
+            revisionField = 'revisi_pembimbing_2';
+          } else {
+            throw new Error('You are not a pembimbing for this sempro');
+          }
+        } else { // penguji
+          if (jadwalData) {
+            if (jadwalData.penguji_1 === user.id) {
+              revisionField = 'revisi_penguji_1';
+            } else if (jadwalData.penguji_2 === user.id) {
+              revisionField = 'revisi_penguji_2';
+            } else {
+              throw new Error('You are not a penguji for this sempro');
+            }
+          } else {
+            throw new Error('Jadwal not found for this sempro');
+          }
+        }
+        
+        // Prepare the revision text
+        let fullRevisionText = `${revision_text}\n\n`;
+        
+        // Add document revision requirements
+        const docRevisions = [];
+        if (require_ta012_revision) docRevisions.push('Form TA-012');
+        if (require_plagiarism_revision) docRevisions.push('Bukti Plagiasi');
+        if (require_draft_revision) docRevisions.push('Draft Proposal');
+        
+        if (docRevisions.length > 0) {
+          fullRevisionText += `\nDokumen yang perlu direvisi:\n- ${docRevisions.join('\n- ')}`;
+        }
+        
+        // Prepare update data
+        const updateData: any = {
+          [revisionField]: fullRevisionText
+        };
+        
+        // Update status to revision_required if this is a major revision
+        if (is_major) {
+          updateData.status = 'revision_required';
+        }
+        
+        // Update the sempro record
+        const { data, error } = await supabase
+          .from('sempros')
+          .update(updateData)
+          .eq('id', sempro_id)
+          .select();
+        
+        if (error) {
+          console.error('Error updating sempro with revision:', error);
+          throw error;
+        }
+        
+        // Add to revision history
+        await supabase
+          .from('riwayat_pendaftaran_sempros')
+          .insert([{
+            sempro_id: sempro_id,
+            pengajuan_ta_id: semproData.pengajuan_ta_id,
+            user_id: user.id,
+            status: is_major ? 'revision_required' : 'completed',
+            keterangan: `Revisi diminta oleh ${dosenName}${is_major ? ' (Revisi Mayor)' : ' (Revisi Minor)'}`
+          }]);
+        
+        // Send notification to student
+        await supabase
+          .from('notifikasis')
+          .insert([{
+            from_user: user.id,
+            to_user: mahasiswa_id,
+            judul: `Revisi ${is_major ? 'Mayor' : 'Minor'} Sempro`,
+            pesan: `${dosenName} meminta revisi ${is_major ? 'mayor' : 'minor'} untuk seminar proposal Anda`,
+            is_read: false
+          }]);
+        
+        return data?.[0];
+      } catch (error) {
+        console.error('Error in request sempro revision process:', error);
+        throw error instanceof Error ? error : new Error(String(error));
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sempro'] });
+      queryClient.invalidateQueries({ queryKey: ['sempros'] });
+      
+      toast({
+        title: "Revisi Diminta",
+        description: "Permintaan revisi berhasil dikirim ke mahasiswa",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        variant: "destructive",
+        title: "Gagal Meminta Revisi",
+        description: error.message || "Terjadi kesalahan saat meminta revisi",
+      });
+    },
+  });
+}
+
+// Approve sempro (for pembimbing)
+export function useApproveSempro() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const { user } = useAuth();
+  
+  return useMutation({
+    mutationFn: async ({ 
+      sempro_id, 
+      pembimbing_type, 
+      approval, 
+      comment 
+    }: { 
+      sempro_id: string;
+      pembimbing_type: 1 | 2; // 1 = pembimbing_1, 2 = pembimbing_2
+      approval: boolean;
+      comment?: string;
+    }) => {
+      if (!user) {
+        throw new Error('User not authenticated');
+      }
+      
+      try {
+        console.log(`${approval ? 'Approving' : 'Disapproving'} sempro as pembimbing ${pembimbing_type}:`, sempro_id);
+        
+        // Get sempro data first to validate the action
+        const { data: semproData, error: semproError } = await supabase
+          .from('sempros')
+          .select(`
+            id, 
+            user_id,
+            pengajuan_ta_id, 
+            status,
+            approve_pembimbing_1,
+            approve_pembimbing_2,
+            pengajuan_ta:pengajuan_ta_id(pembimbing_1, pembimbing_2)
+          `)
+          .eq('id', sempro_id)
+          .single();
+        
+        if (semproError) {
+          console.error('Error fetching sempro data:', semproError);
+          throw new Error('Failed to fetch sempro data');
+        }
+        
+        // Verify that user is the correct pembimbing
+          const pembimbing1 = getPengajuanTaValue(semproData.pengajuan_ta, 'pembimbing_1');
+          const pembimbing2 = getPengajuanTaValue(semproData.pengajuan_ta, 'pembimbing_2');
+
+          if (
+            (pembimbing_type === 1 && pembimbing1 !== user.id) ||
+            (pembimbing_type === 2 && pembimbing2 !== user.id)
+          ) {
+            throw new Error(`You are not pembimbing ${pembimbing_type} for this sempro`);
+          }
+        
+        // Verify that sempro is in completed status
+        if (semproData.status !== 'completed') {
+          throw new Error('Sempro must be in completed status before approval');
+        }
+        
+        // Prepare update data
+        const updateData: any = {
+          [`approve_pembimbing_${pembimbing_type}`]: approval
+        };
+        
+        // Update the sempro record
+        const { data, error } = await supabase
+          .from('sempros')
+          .update(updateData)
+          .eq('id', sempro_id)
+          .select();
+        
+        if (error) {
+          console.error('Error updating sempro with approval:', error);
+          throw error;
+        }
+        
+        // Check if both pembimbings have approved - if yes, update status to 'approved'
+        const bothApproved = (
+          (pembimbing_type === 1 ? approval : semproData.approve_pembimbing_1) &&
+          (pembimbing_type === 2 ? approval : semproData.approve_pembimbing_2)
+        );
+        
+        if (bothApproved) {
+          // Update to approved status
+          const { error: approveError } = await supabase
+            .from('sempros')
+            .update({ status: 'approved' })
+            .eq('id', sempro_id);
+          
+          if (approveError) {
+            console.error('Error updating sempro to approved status:', approveError);
+          } else {
+            // Add to revision history
+            await supabase
+              .from('riwayat_pendaftaran_sempros')
+              .insert([{
+                sempro_id: sempro_id,
+                pengajuan_ta_id: semproData.pengajuan_ta_id,
+                user_id: user.id,
+                status: 'approved',
+                keterangan: 'Seminar proposal telah disetujui oleh kedua pembimbing'
+              }]);
+            
+            // Send notification to student
+            await supabase
+              .from('notifikasis')
+              .insert([{
+                from_user: user.id,
+                to_user: semproData.user_id,
+                judul: 'Seminar Proposal Disetujui',
+                pesan: 'Seminar proposal Anda telah disetujui oleh kedua pembimbing',
+                is_read: false
+              }]);
+          }
+        } else {
+          // Add to revision history for this pembimbing's approval
+          await supabase
+            .from('riwayat_pendaftaran_sempros')
+            .insert([{
+              sempro_id: sempro_id,
+              pengajuan_ta_id: semproData.pengajuan_ta_id,
+              user_id: user.id,
+              status: 'completed',
+              keterangan: `Disetujui oleh Pembimbing ${pembimbing_type}${comment ? ': ' + comment : ''}`
+            }]);
+          
+          // Send notification to student
+          await supabase
+            .from('notifikasis')
+            .insert([{
+              from_user: user.id,
+              to_user: semproData.user_id,
+              judul: `Persetujuan Pembimbing ${pembimbing_type}`,
+              pesan: `Seminar proposal Anda telah disetujui oleh Pembimbing ${pembimbing_type}`,
+              is_read: false
+            }]);
+        }
+        
+        return data?.[0];
+      } catch (error) {
+        console.error('Error in approve sempro process:', error);
+        throw error instanceof Error ? error : new Error(String(error));
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sempro'] });
+      queryClient.invalidateQueries({ queryKey: ['sempros'] });
+      
+      toast({
+        title: "Persetujuan Berhasil",
+        description: "Persetujuan sempro berhasil disimpan",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        variant: "destructive",
+        title: "Gagal Menyetujui",
+        description: error.message || "Terjadi kesalahan saat menyetujui sempro",
+      });
+    },
+  });
+}
+
+// Tambahkan fungsi berikut ke hooks/useSempro.ts
+
+// Tambahkan fungsi ini ke hooks/useSempro.ts sebagai pengganti useReviseSempro duplikat
+
+// Fungsi khusus untuk mengupload revisi setelah evaluasi seminar
+export function useSubmitSemproRevision() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const { user } = useAuth();
+  const router = useRouter();
+  
+  return useMutation({
+    mutationFn: async ({ 
+      id, 
+      catatan, 
+      dokumen_ta012_metadata, 
+      dokumen_plagiarisme_metadata, 
+      dokumen_draft_metadata 
+    }: { 
+      id: string;
+      catatan?: string;
+      dokumen_ta012_metadata?: FileMetadata | null;
+      dokumen_plagiarisme_metadata?: FileMetadata | null;
+      dokumen_draft_metadata?: FileMetadata | null;
+    }) => {
+      if (!user) {
+        throw new Error('User not authenticated');
+      }
+      
+      try {
+        console.log("====== MEMULAI PROSES REVISI PASCA-EVALUASI SEMPRO ======");
+        console.log("User:", user.id);
+        console.log("Sempro ID:", id);
+        
+        // Get the sempro first to check ownership
+        const { data: semproData, error: semproError } = await supabase
+          .from('sempros')
+          .select('*')
+          .eq('id', id)
+          .eq('user_id', user.id)
+          .single();
+        
+        if (semproError) {
+          console.error('Error fetching sempro data:', semproError);
+          throw new Error('Sempro tidak ditemukan atau Anda tidak memiliki akses');
+        }
+        
+        // Persiapkan data update
+        const updateData: any = {
+          status: 'registered', // Reset status to registered for admin review
+          updated_at: new Date().toISOString()
+        };
+        
+        // Tambahkan file yang diupload ulang
+        if (dokumen_ta012_metadata) {
+          updateData.form_ta_012 = dokumen_ta012_metadata.fileUrl;
+        }
+        
+        if (dokumen_plagiarisme_metadata) {
+          updateData.bukti_plagiasi = dokumen_plagiarisme_metadata.fileUrl;
+        }
+        
+        if (dokumen_draft_metadata) {
+          updateData.proposal_ta = dokumen_draft_metadata.fileUrl;
+        }
+        
+        console.log("Data update:", updateData);
+        
+        // Update sempro record
+        const { data, error } = await supabase
+          .from('sempros')
+          .update(updateData)
+          .eq('id', id)
+          .eq('user_id', user.id)
+          .select();
+          
+        if (error) {
+          console.error('Error updating sempro for post-evaluation revision:', error);
+          throw error;
+        }
+        
+        if (!data || data.length === 0) {
+          throw new Error('Gagal mengupdate data sempro');
+        }
+        
+        // Add to revision history
+        const { error: historyError } = await supabase
+          .from('riwayat_pendaftaran_sempros')
+          .insert([{
+            sempro_id: id,
+            pengajuan_ta_id: data[0].pengajuan_ta_id,
+            user_id: user.id,
+            keterangan: catatan 
+              ? `Revisi pasca-evaluasi diupload: ${catatan}` 
+              : 'Dokumen revisi pasca-evaluasi telah diupload',
+            status: 'registered'
+          }]);
+          
+        if (historyError) {
+          console.error('Error adding to revision history:', historyError);
+          // Continue even if history fails
+        }
+        
+        // Clear any previous revision notes - they've been addressed
+        const clearRevisionData: any = {
+          revisi_pembimbing_1: null,
+          revisi_pembimbing_2: null,
+          revisi_penguji_1: null,
+          revisi_penguji_2: null
+        };
+        
+        const { error: clearError } = await supabase
+          .from('sempros')
+          .update(clearRevisionData)
+          .eq('id', id)
+          .eq('user_id', user.id);
+          
+        if (clearError) {
+          console.error('Error clearing revision notes:', clearError);
+          // Continue even if clearing fails
+        }
+        
+        console.log("====== PROSES REVISI PASCA-EVALUASI SEMPRO SELESAI ======");
+        return data[0];
+      } catch (error) {
+        console.error('Error in submit sempro revision process:', error);
+        throw error instanceof Error ? error : new Error(String(error));
+      }
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['sempros'] });
+      queryClient.invalidateQueries({ queryKey: ['sempro', data.id] });
+      
+      toast({
+        title: "Revisi Berhasil",
+        description: "Dokumen revisi berhasil diupload. Menunggu verifikasi admin.",
+      });
+      
+      // Redirect to sempro list
+      setTimeout(() => {
+        try {
+          router.push('/dashboard/sempro');
+        } catch (e) {
+          console.error('Error redirecting:', e);
+          window.location.href = '/dashboard/sempro';
+        }
+      }, 1500);
+    },
+    onError: (error: Error) => {
+      toast({
+        variant: "destructive",
+        title: "Gagal Merevisi",
+        description: error.message || "Terjadi kesalahan saat mengupload revisi.",
+      });
+    },
+  });
+}
+

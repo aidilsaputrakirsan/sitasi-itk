@@ -8,7 +8,8 @@ export type StatusSempro =
   | 'scheduled'          // Sudah dijadwalkan
   | 'completed'          // Seminar selesai
   | 'revision_required'  // Perlu revisi
-  | 'rejected';          // Nilai frontend untuk penolakan
+  | 'rejected'           // Nilai frontend untuk penolakan
+  | 'approved';          // Disetujui oleh pembimbing
 
 export interface FileMetadata {
   fileId: string;

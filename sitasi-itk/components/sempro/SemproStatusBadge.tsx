@@ -43,6 +43,11 @@ export function SemproStatusBadge({ status, className = "" }: SemproStatusBadgeP
       textColor = "text-red-800";
       label = "Ditolak";
       break;
+    case "approved": // Nilai untuk seminar yang telah disetujui pembimbing
+      bgColor = "bg-emerald-100";
+      textColor = "text-emerald-800";
+      label = "Disetujui";
+      break;
     default:
       bgColor = "bg-gray-100";
       textColor = "text-gray-800";
