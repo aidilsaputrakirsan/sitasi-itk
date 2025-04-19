@@ -1,173 +1,250 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useSemproDetail, useDosenPenilaianStatus, useSubmitPenilaianSempro } from '@/hooks/useSempro';
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useSemproDetail, useSubmitPenilaianSempro } from '@/hooks/useSempro';
 import { PenilaianSemproForm } from '@/components/sempro/PenilaianSemproForm';
-import { PenilaianSemproFormValues } from '@/types/sempro';
-import { UserRole } from '@/types/auth';
+import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/use-toast';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { AlertCircle, CheckCircle } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import Link from 'next/link';
 
-export default function PenilaianSemproPage({ params }: { params: { id: string } }) {
-  const router = useRouter();
+export default function SemproDetailPenilaianPage({ params }: { params: { id: string } }) {
   const { user } = useAuth();
+  const router = useRouter();
   const { toast } = useToast();
-  const [userRole, setUserRole] = useState<UserRole>('dosen');
-  const { data: sempro, isLoading: isLoadingSempro } = useSemproDetail(params.id);
-  const { data: hasPenilaian, isLoading: isLoadingPenilaian } = useDosenPenilaianStatus(
-    params.id,
-    user?.id || ''
-  );
-  const { mutate: submitPenilaian, isPending } = useSubmitPenilaianSempro();
-
-  // Set user role
+  const { data: sempro, isLoading, error } = useSemproDetail(params.id);
+  const submitPenilaian = useSubmitPenilaianSempro();
+  const [existingPenilaian, setExistingPenilaian] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // Effect untuk cek apakah dosen sudah pernah memberikan penilaian
   useEffect(() => {
-    if (!user) return;
-    
-    if (user.roles.includes('dosen')) {
-      setUserRole('dosen');
-    } else {
-      router.push('/dashboard/sempro');
-    }
-  }, [user, router]);
-
-  // Check access permissions - only dosen can give penilaian
-  const checkAccess = () => {
-    if (!user || !sempro) return false;
-
-    // Only dosen can access
-    if (!user.roles.includes('dosen')) {
-      return false;
-    }
-
-    // Check if dosen is penguji for this sempro
-    // Need to fetch jadwal data from sempro_id to get penguji info
-    // For now, we'll assume any dosen can give penilaian if the sempro status is 'scheduled'
-    return sempro.status === 'scheduled';
-  };
-
-  const handleSubmit = (formValues: PenilaianSemproFormValues) => {
-    submitPenilaian(formValues, {
-      onSuccess: () => {
-        toast({
-          title: "Penilaian Dikirim",
-          description: "Penilaian seminar proposal berhasil dikirim",
-        });
-        router.push('/dashboard/sempro/jadwal');
-      },
-      onError: (error) => {
-        toast({
-          variant: "destructive", 
-          title: "Gagal Mengirim Penilaian",
-          description: error.message || "Terjadi kesalahan saat mengirim penilaian",
-        });
+    const checkExistingPenilaian = async () => {
+      if (!user || !sempro) return;
+      
+      try {
+        console.log("Checking existing penilaian for sempro:", sempro.id, "and user:", user.id);
+        
+        const { data, error } = await supabase
+          .from('penilaian_sempros')
+          .select('*')
+          .eq('sempro_id', sempro.id)
+          .eq('user_id', user.id)
+          .maybeSingle();
+          
+        if (error) {
+          throw error;
+        }
+        
+        if (data) {
+          console.log("Found existing penilaian:", data);
+          setExistingPenilaian(data);
+        }
+      } catch (error) {
+        console.error("Error checking existing penilaian:", error);
       }
-    });
+    };
+    
+    checkExistingPenilaian();
+  }, [user, sempro]);
+  
+  // Debug log untuk melihat hasil query
+  useEffect(() => {
+    console.log("SemproDetail Debug - ID:", params.id);
+    console.log("SemproDetail Debug - Data:", sempro);
+    console.log("SemproDetail Debug - Error:", error);
+  }, [params.id, sempro, error]);
+  
+  const handlePenilaianSubmit = async (values: any) => {
+    if (!user || !sempro) return;
+    
+    try {
+      setIsSubmitting(true);
+      
+      // Tambahkan sempro_id ke nilai yang disubmit
+      const penilaianData = {
+        ...values,
+        sempro_id: sempro.id
+      };
+      
+      await submitPenilaian.mutateAsync(penilaianData);
+      
+      // Jika berhasil, kembali ke daftar sempro
+      router.push('/dashboard/sempro/penilaian');
+      
+    } catch (error) {
+      console.error('Error submitting penilaian:', error);
+      toast({
+        variant: "destructive",
+        title: "Gagal Menyimpan Penilaian",
+        description: error instanceof Error ? error.message : "Terjadi kesalahan saat menyimpan penilaian.",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
-
-  const isLoading = isLoadingSempro || isLoadingPenilaian;
-
+  
+  // Tampilkan loading
   if (isLoading) {
     return (
-      <div className="container mx-auto px-4 py-6">
-        <div className="flex justify-center">
-          <p className="text-gray-500">Memuat data seminar proposal...</p>
-        </div>
+      <div className="flex justify-center items-center h-64">
+        <p className="text-gray-500">Memuat data seminar proposal...</p>
       </div>
     );
   }
-
-  if (!sempro) {
+  
+  // Tampilkan error jika ada
+  if (error || !sempro) {
     return (
-      <div className="container mx-auto px-4 py-6">
-        <div className="flex flex-col items-center justify-center py-12">
-          <h1 className="text-2xl font-semibold text-gray-900 mb-4">Tidak Ditemukan</h1>
-          <p className="text-gray-500">
-            Data seminar proposal tidak ditemukan.
+      <Card>
+        <CardHeader>
+          <CardTitle>Error</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-red-500">
+            {error instanceof Error ? error.message : "Data seminar proposal tidak ditemukan"}
           </p>
-        </div>
-      </div>
+          <div className="mt-4">
+            <button 
+              className="text-blue-600 hover:underline"
+              onClick={() => router.push('/dashboard/sempro/penilaian')}
+            >
+              Kembali ke Daftar Sempro
+            </button>
+          </div>
+        </CardContent>
+      </Card>
     );
   }
-
-  if (!checkAccess()) {
+  
+  // Jika dosen sudah memberikan penilaian, tampilkan data penilaian
+  if (existingPenilaian) {
     return (
-      <div className="container mx-auto px-4 py-6">
-        <div className="flex flex-col items-center justify-center py-12">
-          <h1 className="text-2xl font-semibold text-gray-900 mb-4">Akses Terbatas</h1>
-          <p className="text-gray-500">
-            Hanya dosen penguji yang dapat memberikan penilaian.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  if (hasPenilaian) {
-    return (
-      <div className="container mx-auto px-4 py-6">
-        <h1 className="text-2xl font-semibold text-gray-900 mb-6">Penilaian Seminar Proposal</h1>
-        
-        <Alert className="mb-6 bg-green-50 border-green-200">
-          <CheckCircle className="h-4 w-4 text-green-600" />
-          <AlertTitle className="text-green-600">Penilaian Sudah Diberikan</AlertTitle>
-          <AlertDescription className="text-green-700">
-            Anda telah memberikan penilaian untuk seminar proposal ini.
-          </AlertDescription>
-        </Alert>
-        
-        <div className="bg-blue-50 p-4 rounded-md border border-blue-100 mb-6">
-          <h2 className="text-lg font-medium mb-2">{sempro.pengajuan_ta?.judul}</h2>
-          <p className="text-sm text-gray-700 mb-1">
-            <span className="font-medium">Mahasiswa:</span> {sempro.mahasiswa?.nama} ({sempro.mahasiswa?.nim})
-          </p>
-          <p className="text-sm text-gray-700">
-            <span className="font-medium">Bidang Penelitian:</span> {sempro.pengajuan_ta?.bidang_penelitian}
-          </p>
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <h1 className="text-2xl font-bold">Penilaian Seminar Proposal</h1>
         </div>
         
-        <div className="flex justify-center">
-          <Button asChild>
-            <Link href="/dashboard/sempro/jadwal">
-              Kembali ke Jadwal
-            </Link>
-          </Button>
-        </div>
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle>Detail Seminar Proposal</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <h3 className="font-medium text-gray-500">Judul</h3>
+                <p>{sempro.pengajuan_ta?.judul || '-'}</p>
+              </div>
+              <div>
+                <h3 className="font-medium text-gray-500">Mahasiswa</h3>
+                <p>{sempro.mahasiswa?.nama || '-'} ({sempro.mahasiswa?.nim || '-'})</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardHeader>
+            <CardTitle>Penilaian Telah Diberikan</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <p className="text-gray-500">
+                Anda telah memberikan penilaian untuk seminar proposal ini pada{' '}
+                {new Date(existingPenilaian.created_at).toLocaleDateString('id-ID', {
+                  weekday: 'long',
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric'
+                })}
+              </p>
+              
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-2 mb-3">
+                <div>
+                  <span className="text-gray-500">Media Presentasi:</span>{' '}
+                  <span className="font-medium">{existingPenilaian.media_presentasi}</span>
+                </div>
+                <div>
+                  <span className="text-gray-500">Komunikasi:</span>{' '}
+                  <span className="font-medium">{existingPenilaian.komunikasi}</span>
+                </div>
+                <div>
+                  <span className="text-gray-500">Penguasaan Materi:</span>{' '}
+                  <span className="font-medium">{existingPenilaian.penguasaan_materi}</span>
+                </div>
+                <div>
+                  <span className="text-gray-500">Isi Laporan:</span>{' '}
+                  <span className="font-medium">{existingPenilaian.isi_laporan_ta}</span>
+                </div>
+                <div>
+                  <span className="text-gray-500">Struktur Penulisan:</span>{' '}
+                  <span className="font-medium">{existingPenilaian.struktur_penulisan}</span>
+                </div>
+                <div>
+                  <span className="text-gray-500">Total:</span>{' '}
+                  <span className="font-medium">{existingPenilaian.nilai_total}</span>
+                </div>
+              </div>
+              
+              {existingPenilaian.catatan && (
+                <div>
+                  <h3 className="font-medium text-gray-500">Catatan:</h3>
+                  <p className="mt-1">{existingPenilaian.catatan}</p>
+                </div>
+              )}
+            </div>
+          </CardContent>
+          <CardFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => router.push('/dashboard/sempro/penilaian')}
+            >
+              Kembali
+            </Button>
+          </CardFooter>
+        </Card>
       </div>
     );
   }
-
+  
+  // Tampilkan form penilaian
   return (
-    <div className="container mx-auto px-4 py-6">
-      <h1 className="text-2xl font-semibold text-gray-900 mb-6">Penilaian Seminar Proposal</h1>
-      
-      <div className="bg-blue-50 p-4 rounded-md border border-blue-100 mb-6">
-        <h2 className="text-lg font-medium mb-2">{sempro.pengajuan_ta?.judul}</h2>
-        <p className="text-sm text-gray-700 mb-1">
-          <span className="font-medium">Mahasiswa:</span> {sempro.mahasiswa?.nama} ({sempro.mahasiswa?.nim})
-        </p>
-        <p className="text-sm text-gray-700">
-          <span className="font-medium">Bidang Penelitian:</span> {sempro.pengajuan_ta?.bidang_penelitian}
-        </p>
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <h1 className="text-2xl font-bold">Penilaian Seminar Proposal</h1>
       </div>
       
-      <Alert className="mb-6">
-        <AlertCircle className="h-4 w-4" />
-        <AlertTitle>Perhatian</AlertTitle>
-        <AlertDescription>
-          Penilaian yang sudah dikirim tidak dapat diubah. Pastikan Anda telah memberikan penilaian yang sesuai.
-        </AlertDescription>
-      </Alert>
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle>Detail Seminar Proposal</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <h3 className="font-medium text-gray-500">Judul</h3>
+              <p>{sempro.pengajuan_ta?.judul || '-'}</p>
+            </div>
+            <div>
+              <h3 className="font-medium text-gray-500">Mahasiswa</h3>
+              <p>{sempro.mahasiswa?.nama || '-'} ({sempro.mahasiswa?.nim || '-'})</p>
+            </div>
+            <div>
+              <h3 className="font-medium text-gray-500">Bidang Penelitian</h3>
+              <p>{sempro.pengajuan_ta?.bidang_penelitian || '-'}</p>
+            </div>
+            <div>
+              <h3 className="font-medium text-gray-500">Status</h3>
+              <p>{sempro.status}</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
       
       <PenilaianSemproForm
-        onSubmit={handleSubmit}
-        isSubmitting={isPending}
-        semproId={params.id}
+        onSubmit={handlePenilaianSubmit}
+        isSubmitting={isSubmitting}
+        semproId={sempro.id}
       />
     </div>
   );

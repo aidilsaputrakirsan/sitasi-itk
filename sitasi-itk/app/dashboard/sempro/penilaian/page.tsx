@@ -27,16 +27,18 @@ export default function PenilaianSemproPage() {
 
   useEffect(() => {
     if (sempros && user) {
-      // Untuk dosen, filter sempro scheduled & completed yang perlu penilaian
+      // Untuk dosen (pembimbing & penguji), tampilkan semua sempro yang dijadwalkan
       if (user.roles.includes('dosen')) {
         const filtered = sempros.filter(item => {
-          // Cek apakah item adalah JadwalSempro dengan properti sempro
-          if ('sempro' in item && item.sempro) {
-            return ['scheduled', 'completed'].includes(item.sempro.status || '');
+          // Cek jika item adalah JadwalSempro dengan property sempro
+          if ('sempro' in item) {
+            // Untuk jadwal sempro, kita hanya perlu cek apakah jadwal sudah dipublikasikan
+            return item.is_published === true;
           } 
           // Atau item adalah Sempro langsung
           else if ('status' in item) {
-            return ['scheduled', 'completed'].includes(item.status || '');
+            // Sempro dengan status scheduled dan completed dapat dinilai
+            return ['scheduled', 'completed'].includes(item.status);
           }
           return false;
         });
@@ -63,7 +65,10 @@ export default function PenilaianSemproPage() {
         <CardContent>
           {filteredSempros.length === 0 ? (
             <div className="text-center py-6">
-              <p className="text-gray-500">Tidak ada seminar proposal yang perlu dinilai</p>
+            <p className="text-gray-500">
+              Tidak ada seminar proposal yang perlu dinilai.<br/>
+              Seminar proposal akan muncul di sini setelah jadwal dipublikasikan.
+            </p>
             </div>
           ) : (
             <DataTable 

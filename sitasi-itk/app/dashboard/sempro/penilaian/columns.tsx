@@ -39,8 +39,22 @@ export const columns = [
     accessorKey: "pengajuan_ta.judul",
     header: "Judul Proposal",
     cell: ({ row }: { row: RowData }) => {
-      const judul = row.original.pengajuan_ta?.judul ||
-                   (row.original as any).sempro?.pengajuan_ta?.judul;
+      let judul = "";
+      
+      // Coba ambil judul dari berbagai struktur data yang mungkin
+      if (row.original.pengajuan_ta?.judul) {
+        judul = row.original.pengajuan_ta.judul;
+      } else if ((row.original as any).sempro?.pengajuan_ta?.judul) {
+        judul = (row.original as any).sempro.pengajuan_ta.judul;
+      } else if (row.original.sempro) {
+        // Jika sempro ada, coba ambil judul dari pengajuan_ta_id
+        const pengajuanId = (row.original.sempro as any).pengajuan_ta_id;
+        if (pengajuanId) {
+          // Untuk logging dan debugging
+          console.log("Mencoba mendapatkan judul dari pengajuan_ta_id:", pengajuanId);
+        }
+      }
+      
       return <div className="max-w-md truncate">{judul || '-'}</div>;
     },
   },
@@ -57,18 +71,18 @@ export const columns = [
       } else {
         status = 'registered'; // Default fallback
       }
-     
+      
       // Define valid status values for type safety
       const validStatuses: StatusSempro[] = [
-        'registered', 'evaluated', 'verified', 'scheduled',
+        'registered', 'evaluated', 'verified', 'scheduled', 
         'completed', 'revision_required', 'rejected', 'approved'
       ];
-     
+      
       // Validate and ensure we return a valid StatusSempro type
-      const validStatus = validStatuses.includes(status as StatusSempro)
-        ? (status as StatusSempro)
+      const validStatus = validStatuses.includes(status as StatusSempro) 
+        ? (status as StatusSempro) 
         : ('registered' as StatusSempro);
-       
+        
       return <SemproStatusBadge status={validStatus} />;
     },
   },
@@ -80,16 +94,16 @@ export const columns = [
       const sempro = (row.original as any).sempro || row.original;
       const id = sempro.id;
       const isPenilaianSubmitted = (row.original as any).isPenilaianSubmitted;
-     
+      
       return (
         <div className="flex space-x-2">
-          <Button
+          <Button 
             variant={isPenilaianSubmitted ? "outline" : "default"}
             onClick={() => router.push(`/dashboard/sempro/penilaian/${id}`)}
           >
             {isPenilaianSubmitted ? "Lihat Penilaian" : "Nilai Sempro"}
           </Button>
-          <Button
+          <Button 
             variant="outline"
             onClick={() => router.push(`/dashboard/sempro/request-revision/${id}`)}
           >
