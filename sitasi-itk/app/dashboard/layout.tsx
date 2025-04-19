@@ -113,8 +113,9 @@ export default function DashboardLayout({
 
     const dosenItems = [
       { name: 'Mahasiswa Bimbingan', href: '/dashboard/bimbingan', icon: <UserIcon /> },
-      { name: 'Pengajuan TA', href: '/dashboard/pengajuan', icon: <DocumentIcon /> }, // Added this item
+      { name: 'Pengajuan TA', href: '/dashboard/pengajuan', icon: <DocumentIcon /> },
       { name: 'Jadwal Sempro', href: '/dashboard/sempro', icon: <CalendarIcon /> },
+      { name: 'Penilaian Sempro', href: '/dashboard/sempro/penilaian', icon: <DocumentIcon /> }, // TAMBAHKAN INI
       { name: 'Jadwal Sidang', href: '/dashboard/jadwal-sidang', icon: <CalendarIcon /> },
       { name: 'Penilaian', href: '/dashboard/penilaian', icon: <DocumentIcon /> },
       { name: 'Referensi', href: '/dashboard/referensi', icon: <BookOpenIcon /> },
@@ -123,9 +124,10 @@ export default function DashboardLayout({
     const tendikItems = [
       { name: 'Data Mahasiswa', href: '/dashboard/data-mahasiswa', icon: <UserIcon /> },
       { name: 'Data Dosen', href: '/dashboard/data-dosen', icon: <UserIcon /> },
-      { name: 'Pengajuan TA', href: '/dashboard/pengajuan', icon: <DocumentIcon /> }, // Changed from '/dashboard/data-pengajuan'
+      { name: 'Pengajuan TA', href: '/dashboard/pengajuan', icon: <DocumentIcon /> },
       { name: 'Periode', href: '/dashboard/sempro/periode', icon: <CalendarIcon /> },
       { name: 'Jadwal Sempro', href: '/dashboard/sempro', icon: <CalendarIcon /> },
+      { name: 'Evaluasi Sempro', href: '/dashboard/sempro/penilaian', icon: <DocumentIcon /> }, // TAMBAHKAN INI
       { name: 'Jadwal Sidang', href: '/dashboard/kelola-sidang', icon: <CalendarIcon /> },
       { name: 'Katalog TA', href: '/dashboard/kelola-katalog', icon: <BookOpenIcon /> },
     ];
