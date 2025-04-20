@@ -33,7 +33,6 @@ const getValidStatus = (status: string): StatusSempro => {
   // Daftar nilai yang valid untuk StatusSempro berdasarkan definisi type
   const validStatusValues: StatusSempro[] = [
     'registered', 
-    'evaluated', 
     'verified',
     'scheduled', 
     'completed', 

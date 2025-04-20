@@ -1,3 +1,4 @@
+// app/dashboard/sempro/[id]/page.tsx - dengan alur yang diperbaiki
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -33,20 +34,14 @@ function SemproHistory({ semproId }: { semproId: string }) {
   return (
     <div className="space-y-3">
       {riwayat.map((item, i) => (
-        <div key={i} className="flex items-start p-3 bg-gray-50 rounded-md border border-gray-100">
-          <div className="w-full">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <SemproStatusBadge status={item.status} />
-                <span className="text-xs text-gray-500">
-                  {format(new Date(item.created_at), 'dd MMMM yyyy, HH:mm', { locale: id })}
-                </span>
-              </div>
-              {item.user?.name && (
-                <span className="text-xs text-gray-500">oleh {item.user.name}</span>
-              )}
-            </div>
-            <p className="mt-2 text-sm text-gray-700">{item.keterangan}</p>
+        <div key={i} className="border-l-2 border-gray-200 pl-4 py-1">
+          <div className="flex justify-between items-start">
+            <p className="font-medium text-sm">{item.keterangan}</p>
+            <SemproStatusBadge status={item.status} className="ml-2" />
+          </div>
+          <div className="flex justify-between mt-2 text-xs text-gray-500">
+            <span>{item.user?.name || 'User'}</span>
+            <span>{format(new Date(item.created_at), 'dd MMMM yyyy, HH:mm', { locale: id })}</span>
           </div>
         </div>
       ))}
@@ -311,36 +306,34 @@ export default function SemproDetailPage({ params }: { params: { id: string } })
           <CardHeader>
             <CardTitle>Catatan Revisi</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {sempro.revisi_pembimbing_1 && (
-                <div className="border-l-4 border-blue-500 pl-4 py-2">
-                  <h3 className="font-medium text-blue-700">Pembimbing 1</h3>
-                  <p className="mt-1 text-gray-700 whitespace-pre-line">{sempro.revisi_pembimbing_1}</p>
-                </div>
-              )}
-              
-              {sempro.revisi_pembimbing_2 && (
-                <div className="border-l-4 border-green-500 pl-4 py-2">
-                  <h3 className="font-medium text-green-700">Pembimbing 2</h3>
-                  <p className="mt-1 text-gray-700 whitespace-pre-line">{sempro.revisi_pembimbing_2}</p>
-                </div>
-              )}
-              
-              {sempro.revisi_penguji_1 && (
-                <div className="border-l-4 border-purple-500 pl-4 py-2">
-                  <h3 className="font-medium text-purple-700">Penguji 1</h3>
-                  <p className="mt-1 text-gray-700 whitespace-pre-line">{sempro.revisi_penguji_1}</p>
-                </div>
-              )}
-              
-              {sempro.revisi_penguji_2 && (
-                <div className="border-l-4 border-orange-500 pl-4 py-2">
-                  <h3 className="font-medium text-orange-700">Penguji 2</h3>
-                  <p className="mt-1 text-gray-700 whitespace-pre-line">{sempro.revisi_penguji_2}</p>
-                </div>
-              )}
-            </div>
+          <CardContent className="space-y-4">
+            {sempro.revisi_pembimbing_1 && (
+              <div className="border-l-4 border-blue-500 pl-4 py-2">
+                <h3 className="font-medium text-blue-700">Pembimbing 1</h3>
+                <p className="mt-1 text-gray-700 whitespace-pre-line">{sempro.revisi_pembimbing_1}</p>
+              </div>
+            )}
+            
+            {sempro.revisi_pembimbing_2 && (
+              <div className="border-l-4 border-green-500 pl-4 py-2">
+                <h3 className="font-medium text-green-700">Pembimbing 2</h3>
+                <p className="mt-1 text-gray-700 whitespace-pre-line">{sempro.revisi_pembimbing_2}</p>
+              </div>
+            )}
+            
+            {sempro.revisi_penguji_1 && (
+              <div className="border-l-4 border-purple-500 pl-4 py-2">
+                <h3 className="font-medium text-purple-700">Penguji 1</h3>
+                <p className="mt-1 text-gray-700 whitespace-pre-line">{sempro.revisi_penguji_1}</p>
+              </div>
+            )}
+            
+            {sempro.revisi_penguji_2 && (
+              <div className="border-l-4 border-orange-500 pl-4 py-2">
+                <h3 className="font-medium text-orange-700">Penguji 2</h3>
+                <p className="mt-1 text-gray-700 whitespace-pre-line">{sempro.revisi_penguji_2}</p>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
@@ -358,8 +351,8 @@ export default function SemproDetailPage({ params }: { params: { id: string } })
         </CardContent>
       </Card>
       
-      {/* Approval Cards - Only show for pembimbing */}
-      {isPembimbing1 && (
+      {/* Approval Cards - Only show for pembimbing when sempro is completed */}
+      {isPembimbing1 && sempro.status === 'completed' && (
         <SemproApprovalCard 
           sempro={sempro} 
           isPembimbing1={true}
@@ -367,7 +360,7 @@ export default function SemproDetailPage({ params }: { params: { id: string } })
         />
       )}
       
-      {isPembimbing2 && (
+      {isPembimbing2 && sempro.status === 'completed' && (
         <SemproApprovalCard 
           sempro={sempro} 
           isPembimbing1={false}
@@ -385,39 +378,50 @@ export default function SemproDetailPage({ params }: { params: { id: string } })
           Kembali
         </Button>
         
-        {/* Penilaian Button - For penguji */}
-        {(isPenguji1 || isPenguji2) && 
-         sempro.status === 'scheduled' && 
-         !isPenilaianSubmitted && (
+        {/* Admin Verification Button */}
+        {(userRole === 'tendik' || userRole === 'koorpro') && sempro.status === 'registered' && (
           <Button
-            onClick={() => router.push(`/dashboard/sempro/penilaian/${sempro.id}`)}
+            onClick={() => router.push(`/dashboard/sempro/verify/${sempro.id}`)}
           >
-            Berikan Penilaian
+            Verifikasi Seminar
           </Button>
         )}
         
-        {/* View Penilaian - For penguji who submitted */}
-        {(isPenguji1 || isPenguji2) && 
-         isPenilaianSubmitted && (
+        {/* Admin Schedule Button */}
+        {(userRole === 'tendik' || userRole === 'koorpro') && 
+         (sempro.status === 'verified') && (
           <Button
-            variant="outline"
-            onClick={() => router.push(`/dashboard/sempro/penilaian/${sempro.id}`)}
+            onClick={() => router.push(`/dashboard/sempro/schedule/${sempro.id}`)}
           >
-            Lihat Penilaian
+            Jadwalkan Seminar
           </Button>
         )}
         
-        {/* Request Revision - For pembimbing and penguji */}
-        {(isPembimbing1 || isPembimbing2 || isPenguji1 || isPenguji2) && (
+        {/* Penilaian Button - For penguji or pembimbing when status is scheduled */}
+        {userRole === 'dosen' && 
+         (isPenguji1 || isPenguji2 || isPembimbing1 || isPembimbing2) && 
+         sempro.status === 'scheduled' && (
           <Button
-            variant="outline"
+            onClick={() => router.push(`/dashboard/sempro/penilaian/${sempro.id}`)}
+            variant={isPenilaianSubmitted ? "outline" : "default"}
+          >
+            {isPenilaianSubmitted ? 'Edit Penilaian' : 'Berikan Penilaian'}
+          </Button>
+        )}
+        
+        {/* Request Revision - Only for dosen with penilaian submitted and status completed */}
+        {userRole === 'dosen' && 
+         (isPenguji1 || isPenguji2 || isPembimbing1 || isPembimbing2) && 
+         sempro.status === 'completed' && (
+          <Button
             onClick={() => router.push(`/dashboard/sempro/request-revision/${sempro.id}`)}
+            variant="outline"
           >
             Minta Revisi
           </Button>
         )}
         
-        {/* Submit Revision - For mahasiswa */}
+        {/* Submit Revision - For mahasiswa with revision_required status */}
         {userRole === 'mahasiswa' && 
          sempro.user_id === user?.id &&
          sempro.status === 'revision_required' && (

@@ -18,7 +18,6 @@ export function SemproStatusBadge({ status, className = "" }: SemproStatusBadgeP
       label = "Terdaftar";
       break;
     case "verified":
-    case "evaluated": // Menangani kedua nilai - 'verified' di frontend dan 'evaluated' di DB
       bgColor = "bg-purple-100";
       textColor = "text-purple-800";
       label = "Terverifikasi";

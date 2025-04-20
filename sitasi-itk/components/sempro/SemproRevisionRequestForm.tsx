@@ -1,7 +1,7 @@
-// components/sempro/SemproRevisionRequestForm.tsx
+// components/sempro/SemproRevisionRequestForm.tsx - Dengan validasi penilaian
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -14,6 +14,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
+import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
+import { AlertCircle } from 'lucide-react';
 
 // Interface for form values
 interface RevisionRequestFormValues {
@@ -50,6 +52,58 @@ export function SemproRevisionRequestForm({
   const router = useRouter();
   const { user } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [hasPenilaian, setHasPenilaian] = useState(false);
+  const [isCompleted, setIsCompleted] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState('');
+  
+  // Check if user has given penilaian
+  useEffect(() => {
+    const checkPenilaian = async () => {
+      setIsLoading(true);
+      try {
+        if (!user) return;
+        
+        // First check sempro status
+        const { data: semproData, error: semproError } = await supabase
+          .from('sempros')
+          .select('status')
+          .eq('id', semproId)
+          .single();
+          
+        if (semproError) {
+          console.error('Error fetching sempro status:', semproError);
+          setErrorMessage('Tidak dapat memuat data sempro');
+          return;
+        }
+        
+        setIsCompleted(semproData.status === 'completed');
+        
+        // Check if user has submitted penilaian
+        const { data: penilaianData, error: penilaianError } = await supabase
+          .from('penilaian_sempros')
+          .select('id')
+          .eq('sempro_id', semproId)
+          .eq('user_id', user.id)
+          .maybeSingle();
+          
+        if (penilaianError) {
+          console.error('Error checking penilaian:', penilaianError);
+          setErrorMessage('Tidak dapat memeriksa penilaian');
+          return;
+        }
+        
+        setHasPenilaian(!!penilaianData);
+      } catch (error) {
+        console.error('Error in checkPenilaian:', error);
+        setErrorMessage('Terjadi kesalahan saat memeriksa data');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    checkPenilaian();
+  }, [semproId, user]);
   
   const {
     register,
@@ -79,6 +133,26 @@ export function SemproRevisionRequestForm({
         variant: "destructive",
         title: "Sesi tidak valid",
         description: "Silakan login kembali untuk melakukan tindakan ini",
+      });
+      return;
+    }
+    
+    // Verify user has provided penilaian
+    if (!hasPenilaian) {
+      toast({
+        variant: "destructive",
+        title: "Penilaian Diperlukan",
+        description: "Anda harus memberikan penilaian sebelum meminta revisi",
+      });
+      return;
+    }
+    
+    // Verify sempro is in completed status
+    if (!isCompleted) {
+      toast({
+        variant: "destructive",
+        title: "Status Tidak Valid",
+        description: "Revisi hanya dapat diminta setelah semua penilaian selesai",
       });
       return;
     }
@@ -238,12 +312,91 @@ export function SemproRevisionRequestForm({
     }
   };
 
+  if (isLoading) {
+    return (
+      <Card>
+        <CardContent className="py-8">
+          <div className="flex items-center justify-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
+            <span className="ml-3">Memeriksa data...</span>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (errorMessage) {
+    return (
+      <Card>
+        <CardContent className="py-6">
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Error</AlertTitle>
+            <AlertDescription>{errorMessage}</AlertDescription>
+          </Alert>
+          <div className="mt-4">
+            <Button variant="outline" onClick={() => router.back()}>Kembali</Button>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Check prerequisite requirements
+  if (!hasPenilaian) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Tidak Dapat Meminta Revisi</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Alert>
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Penilaian Diperlukan</AlertTitle>
+            <AlertDescription>
+              Anda harus memberikan penilaian terlebih dahulu sebelum meminta revisi. 
+              Silakan berikan penilaian pada halaman detail sempro.
+            </AlertDescription>
+          </Alert>
+          <div className="mt-4">
+            <Button onClick={() => router.push(`/dashboard/sempro/penilaian/${semproId}`)}>
+              Berikan Penilaian
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!isCompleted) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Tidak Dapat Meminta Revisi</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Alert>
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Status Tidak Valid</AlertTitle>
+            <AlertDescription>
+              Revisi hanya dapat diminta setelah seminar proposal selesai dan semua dosen memberikan 
+              penilaian (status "Selesai").
+            </AlertDescription>
+          </Alert>
+          <div className="mt-4">
+            <Button variant="outline" onClick={() => router.back()}>Kembali</Button>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <Card className="w-full">
       <CardHeader>
         <CardTitle>Permintaan Revisi Seminar Proposal</CardTitle>
       </CardHeader>
-      <form onSubmit={handleSubmit(onSubmit as any)}>
+      <form onSubmit={handleSubmit(onSubmit)}>
         <CardContent className="space-y-6">
           <input type="hidden" {...register('sempro_id')} value={semproId} />
           

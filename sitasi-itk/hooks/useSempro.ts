@@ -22,6 +22,10 @@ import { UserRole } from '@/types/auth';
 import { useToast } from './use-toast';
 import { useRouter } from 'next/navigation';
 import { useGoogleDriveStorage } from '@/hooks/useGoogleDriveStorage';
+import { 
+  isValidStatusTransition, 
+  getStatusTransitionReason 
+} from '@/lib/status-validation';
 
 // Constants
 const SEMPRO_FOLDER_ID = process.env.NEXT_PUBLIC_SEMPRO_FOLDER_ID || '1y-4qBRLQnkLezBcYYf_N6kMxqaUXa6Lx';
@@ -1368,7 +1372,7 @@ export function useCreateSempro() {
 }
 
 /**
- * Hook to update sempro status (for admin)
+ * Hook to update sempro status (for admin) with validation
  */
 export function useUpdateSemproStatus() {
   const queryClient = useQueryClient();
@@ -1388,7 +1392,17 @@ export function useUpdateSemproStatus() {
         console.log(`======= SEMPRO STATUS UPDATE PROCESS =======`);
         console.log(`ID: ${id} | Status: ${status} | MahasiswaID: ${mahasiswaId}`);
         
-        // 1. Get sempro data first to get pengajuan_ta_id
+        // Get current user role
+        let userRole: UserRole = 'mahasiswa';
+        if (user.roles.includes('koorpro')) {
+          userRole = 'koorpro';
+        } else if (user.roles.includes('tendik')) {
+          userRole = 'tendik';
+        } else if (user.roles.includes('dosen')) {
+          userRole = 'dosen';
+        }
+        
+        // 1. Get sempro data first to check current status
         const { data: semproData, error: semproError } = await supabase
           .from('sempros')
           .select('id, pengajuan_ta_id, status')
@@ -1404,14 +1418,24 @@ export function useUpdateSemproStatus() {
           throw new Error('Sempro data not found');
         }
         
-        console.log('Sempro data to update:', semproData);
+        console.log('Current sempro status:', semproData.status);
+        console.log('Attempting to change to:', status);
         
-        // 2. Special handling for rejected status
-        if (status === 'rejected') {
-          catatan = `DITOLAK: ${catatan || 'Dokumen tidak memenuhi syarat'}`;
+        // 2. Validate status transition
+        const currentStatus = semproData.status as StatusSempro;
+        if (!isValidStatusTransition(currentStatus, status, userRole)) {
+          throw new Error(`Status tidak dapat diubah dari ${currentStatus} ke ${status} oleh ${userRole}`);
         }
         
-        // 3. Update status in database
+        // 3. Special handling for rejected status
+        if (status === 'rejected') {
+          if (!catatan) {
+            throw new Error('Alasan penolakan harus diisi');
+          }
+          catatan = `DITOLAK: ${catatan}`;
+        }
+        
+        // 4. Update status in database
         const { data: updateData, error: updateError } = await supabase
           .from('sempros')
           .update({
@@ -1428,31 +1452,17 @@ export function useUpdateSemproStatus() {
         
         console.log('Sempro status updated successfully');
         
-        // 4. Create status description
-        let keterangan = '';
-        switch (status) {
-          case 'verified':
-            keterangan = catatan || 'Dokumen telah diverifikasi oleh admin';
-            break;
-          case 'scheduled':
-            keterangan = 'Seminar telah dijadwalkan';
-            break;
-          case 'completed':
-            keterangan = 'Seminar telah selesai';
-            break;
-          case 'revision_required':
-            keterangan = catatan || 'Perlu revisi pada dokumen';
-            break;
-          case 'rejected':
-            keterangan = catatan || 'Pendaftaran ditolak';
-            break;
-          default:
-            keterangan = `Status berubah menjadi ${status}`;
+        // 5. Get status transition reason
+        let keterangan = getStatusTransitionReason(currentStatus, status);
+        
+        // Add custom note if provided
+        if (catatan) {
+          keterangan = status === 'rejected' ? catatan : `${keterangan}: ${catatan}`;
         }
         
         console.log("Adding history with description:", keterangan);
         
-        // 5. Add registration history - ENSURE ALL FIELDS ARE FILLED
+        // 6. Add registration history - ENSURE ALL FIELDS ARE FILLED
         const riwayatData = {
           sempro_id: id,
           pengajuan_ta_id: semproData.pengajuan_ta_id,
@@ -1481,14 +1491,24 @@ export function useUpdateSemproStatus() {
           console.log('History added successfully:', riwayatResult);
         }
         
-        // 6. Send notification
+        // 7. Send notification
         try {
+          const notificationTitle = status === 'verified' 
+            ? 'Pendaftaran Terverifikasi'
+            : status === 'scheduled'
+            ? 'Seminar Dijadwalkan'
+            : status === 'completed'
+            ? 'Seminar Selesai'
+            : status === 'rejected'
+            ? 'Pendaftaran Ditolak'
+            : 'Status Sempro Diperbarui';
+            
           const { error: notifError } = await supabase
             .from('notifikasis')
             .insert([{
               from_user: user.id,
               to_user: mahasiswaId,
-              judul: `Status Sempro: ${status}`,
+              judul: notificationTitle,
               pesan: keterangan,
               is_read: false
             }]);
@@ -1565,7 +1585,7 @@ export function useSubmitSemproRevision() {
         console.log("User:", user.id);
         console.log("Sempro ID:", id);
         
-        // Get the sempro first to check ownership
+        // Get the sempro first to check ownership and status
         const { data: semproData, error: semproError } = await supabase
           .from('sempros')
           .select('*')
@@ -1576,6 +1596,40 @@ export function useSubmitSemproRevision() {
         if (semproError) {
           console.error('Error fetching sempro data:', semproError);
           throw new Error('Sempro not found or you do not have access');
+        }
+        
+        // Verify sempro is in revision_required status
+        if (semproData.status !== 'revision_required') {
+          throw new Error('Revisi hanya dapat disubmit untuk sempro dengan status "Perlu Revisi"');
+        }
+        
+        // Check revision requirements from penguji and pembimbing
+        const requiresTA012 = semproData.revisi_pembimbing_1?.includes('Form TA-012') ||
+                             semproData.revisi_pembimbing_2?.includes('Form TA-012') ||
+                             semproData.revisi_penguji_1?.includes('Form TA-012') ||
+                             semproData.revisi_penguji_2?.includes('Form TA-012');
+                             
+        const requiresPlagiarisme = semproData.revisi_pembimbing_1?.includes('Bukti Plagiasi') ||
+                                  semproData.revisi_pembimbing_2?.includes('Bukti Plagiasi') ||
+                                  semproData.revisi_penguji_1?.includes('Bukti Plagiasi') ||
+                                  semproData.revisi_penguji_2?.includes('Bukti Plagiasi');
+                                  
+        const requiresDraft = semproData.revisi_pembimbing_1?.includes('Draft Proposal') ||
+                            semproData.revisi_pembimbing_2?.includes('Draft Proposal') ||
+                            semproData.revisi_penguji_1?.includes('Draft Proposal') ||
+                            semproData.revisi_penguji_2?.includes('Draft Proposal');
+        
+        // Check if required documents are provided
+        if (requiresTA012 && !dokumen_ta012_metadata) {
+          throw new Error('Form TA-012 diperlukan untuk revisi ini');
+        }
+        
+        if (requiresPlagiarisme && !dokumen_plagiarisme_metadata) {
+          throw new Error('Bukti Plagiasi diperlukan untuk revisi ini');
+        }
+        
+        if (requiresDraft && !dokumen_draft_metadata) {
+          throw new Error('Draft Proposal diperlukan untuk revisi ini');
         }
         
         // Prepare update data
@@ -1653,6 +1707,74 @@ export function useSubmitSemproRevision() {
           // Continue even if clearing fails
         }
         
+        // Notify pembimbing and penguji about revision submission
+        try {
+          // Get pengajuan_ta to get pembimbing information
+          const { data: pengajuanData, error: pengajuanError } = await supabase
+            .from('pengajuan_tas')
+            .select('pembimbing_1, pembimbing_2')
+            .eq('id', data[0].pengajuan_ta_id)
+            .single();
+            
+          if (pengajuanError) {
+            console.error('Error fetching pengajuan data:', pengajuanError);
+          } else {
+            // Get jadwal to get penguji information
+            const { data: jadwalData, error: jadwalError } = await supabase
+              .from('jadwal_sempros')
+              .select('penguji_1, penguji_2')
+              .eq('pengajuan_ta_id', data[0].pengajuan_ta_id)
+              .eq('user_id', data[0].user_id)
+              .single();
+              
+            if (jadwalError) {
+              console.error('Error fetching jadwal data:', jadwalError);
+            } else {
+              // Create notifications for all dosen
+              const notifications = [
+                pengajuanData.pembimbing_1 ? {
+                  from_user: user.id,
+                  to_user: pengajuanData.pembimbing_1,
+                  judul: 'Revisi Sempro Disubmit',
+                  pesan: `Mahasiswa telah mengupload revisi untuk seminar proposal`,
+                  is_read: false
+                } : null,
+                pengajuanData.pembimbing_2 ? {
+                  from_user: user.id,
+                  to_user: pengajuanData.pembimbing_2,
+                  judul: 'Revisi Sempro Disubmit',
+                  pesan: `Mahasiswa telah mengupload revisi untuk seminar proposal`,
+                  is_read: false
+                } : null,
+                jadwalData.penguji_1 ? {
+                  from_user: user.id,
+                  to_user: jadwalData.penguji_1,
+                  judul: 'Revisi Sempro Disubmit',
+                  pesan: `Mahasiswa telah mengupload revisi untuk seminar proposal`,
+                  is_read: false
+                } : null,
+                jadwalData.penguji_2 ? {
+                  from_user: user.id,
+                  to_user: jadwalData.penguji_2,
+                  judul: 'Revisi Sempro Disubmit',
+                  pesan: `Mahasiswa telah mengupload revisi untuk seminar proposal`,
+                  is_read: false
+                } : null
+              ].filter(Boolean); // Filter out null notifications
+              
+              // Insert notifications
+              if (notifications.length > 0) {
+                await supabase
+                  .from('notifikasis')
+                  .insert(notifications);
+              }
+            }
+          }
+        } catch (notifError) {
+          console.error('Error sending notifications:', notifError);
+          // Continue even if notifications fail
+        }
+        
         console.log("====== SEMPRO REVISION SUBMISSION PROCESS COMPLETED ======");
         return data[0];
       } catch (error) {
@@ -1724,6 +1846,45 @@ export function useRequestSemproRevision() {
       try {
         console.log("Requesting revision for sempro:", sempro_id);
         
+        // Get sempro data first to check status and permission
+        const { data: semproData, error: semproError } = await supabase
+          .from('sempros')
+          .select(`
+            id, 
+            pengajuan_ta_id,
+            status,
+            pengajuan_ta:pengajuan_ta_id(pembimbing_1, pembimbing_2)
+          `)
+          .eq('id', sempro_id)
+          .single();
+        
+        if (semproError) {
+          console.error('Error fetching sempro data:', semproError);
+          throw new Error('Failed to fetch sempro data');
+        }
+        
+        // CRITICAL: Verify sempro is in completed status
+        // Revisions can only be requested after all evaluations are done
+        if (semproData.status !== 'completed') {
+          throw new Error('Revisi hanya dapat diminta setelah semua penilaian selesai');
+        }
+
+        // Check if user has submitted a penilaian
+        const { data: penilaianData, error: penilaianError } = await supabase
+          .from('penilaian_sempros')
+          .select('id')
+          .eq('sempro_id', sempro_id)
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+        if (penilaianError) {
+          console.error('Error checking penilaian:', penilaianError);
+        }
+
+        if (!penilaianData) {
+          throw new Error('Anda harus memberikan penilaian terlebih dahulu sebelum meminta revisi');
+        }
+        
         // Get dosen's full name for the revision record
         const { data: profileData, error: profileError } = await supabase
           .from('profiles')
@@ -1737,22 +1898,6 @@ export function useRequestSemproRevision() {
         }
         
         const dosenName = profileData?.name || 'Dosen';
-        
-        // First get the sempro detail to know which penguji/pembimbing number this is
-        const { data: semproData, error: semproError } = await supabase
-          .from('sempros')
-          .select(`
-            id, 
-            pengajuan_ta_id, 
-            pengajuan_ta:pengajuan_ta_id(pembimbing_1, pembimbing_2)
-          `)
-          .eq('id', sempro_id)
-          .single();
-        
-        if (semproError) {
-          console.error('Error fetching sempro data:', semproError);
-          throw new Error('Failed to fetch sempro data');
-        }
         
         // Next, get the jadwal to check penguji
         const { data: jadwalData, error: jadwalError } = await supabase
@@ -1779,7 +1924,7 @@ export function useRequestSemproRevision() {
           } else if (pembimbing2 === user.id) {
             revisionField = 'revisi_pembimbing_2';
           } else {
-            throw new Error('You are not a pembimbing for this sempro');
+            throw new Error('Anda bukan pembimbing untuk sempro ini');
           }
         } else { // penguji
           if (jadwalData) {
@@ -1788,10 +1933,10 @@ export function useRequestSemproRevision() {
             } else if (jadwalData.penguji_2 === user.id) {
               revisionField = 'revisi_penguji_2';
             } else {
-              throw new Error('You are not a penguji for this sempro');
+              throw new Error('Anda bukan penguji untuk sempro ini');
             }
           } else {
-            throw new Error('Jadwal not found for this sempro');
+            throw new Error('Jadwal tidak ditemukan untuk sempro ini');
           }
         }
         
@@ -2373,117 +2518,203 @@ export function useSubmitPenilaianSempro() {
         console.log("Submitting penilaian sempro with data:", formValues);
         
         // Verify required fields
-        if (!formValues.sempro_id || !formValues.media_presentasi || !formValues.komunikasi ||
-            !formValues.penguasaan_materi || !formValues.isi_laporan_ta || !formValues.struktur_penulisan) {
+        if (!formValues.sempro_id || 
+            formValues.media_presentasi === undefined || 
+            formValues.komunikasi === undefined ||
+            formValues.penguasaan_materi === undefined || 
+            formValues.isi_laporan_ta === undefined || 
+            formValues.struktur_penulisan === undefined) {
           throw new Error('Semua kriteria penilaian harus diisi');
         }
         
+        // Check if sempro exists and valid for penilaian
+        const { data: semproData, error: semproError } = await supabase
+          .from('sempros')
+          .select('id, user_id, pengajuan_ta_id, status')
+          .eq('id', formValues.sempro_id)
+          .single();
+          
+        if (semproError) {
+          console.error('Error fetching sempro data:', semproError);
+          throw new Error('Data sempro tidak ditemukan');
+        }
+        
+        // Check if sempro is in scheduled status
+        if (semproData.status !== 'scheduled' && semproData.status !== 'completed') {
+          throw new Error('Penilaian hanya dapat diberikan untuk sempro dengan status "scheduled" atau "completed"');
+        }
+        
+        // Check if this dosen has already submitted a penilaian
+        const { data: existingPenilaian, error: checkError } = await supabase
+          .from('penilaian_sempros')
+          .select('id')
+          .eq('sempro_id', formValues.sempro_id)
+          .eq('user_id', user.id)
+          .maybeSingle();
+          
+        if (checkError) {
+          console.error('Error checking existing penilaian:', checkError);
+        }
+        
         // Calculate total score
-        const total = (
+        const nilai_total = (
           Number(formValues.media_presentasi) +
           Number(formValues.komunikasi) +
           Number(formValues.penguasaan_materi) +
           Number(formValues.isi_laporan_ta) +
           Number(formValues.struktur_penulisan)
-        );
+        ) / 5;  // Average of all criteria
         
-        // Create penilaian sempro record
-        const { data, error } = await supabase
-          .from('penilaian_sempros')
-          .insert([{
-            sempro_id: formValues.sempro_id,
-            user_id: user.id,
-            media_presentasi: formValues.media_presentasi,
-            komunikasi: formValues.komunikasi,
-            penguasaan_materi: formValues.penguasaan_materi,
-            isi_laporan_ta: formValues.isi_laporan_ta,
-            struktur_penulisan: formValues.struktur_penulisan,
-            nilai_total: total,
-            catatan: formValues.catatan || null
-          }])
-          .select();
+        // If penilaian already exists, update it
+        if (existingPenilaian) {
+          const { data, error } = await supabase
+            .from('penilaian_sempros')
+            .update({
+              media_presentasi: formValues.media_presentasi,
+              komunikasi: formValues.komunikasi,
+              penguasaan_materi: formValues.penguasaan_materi,
+              isi_laporan_ta: formValues.isi_laporan_ta,
+              struktur_penulisan: formValues.struktur_penulisan,
+              nilai_total: nilai_total,
+              catatan: formValues.catatan || null,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', existingPenilaian.id)
+            .select();
+            
+          if (error) {
+            console.error('Error updating penilaian sempro:', error);
+            throw error;
+          }
           
-        if (error) {
-          console.error('Error submitting penilaian sempro:', error);
-          throw error;
+          console.log('Updated existing penilaian:', data);
+        } 
+        // Otherwise create a new penilaian record
+        else {
+          const { data, error } = await supabase
+            .from('penilaian_sempros')
+            .insert([{
+              sempro_id: formValues.sempro_id,
+              user_id: user.id,
+              media_presentasi: formValues.media_presentasi,
+              komunikasi: formValues.komunikasi,
+              penguasaan_materi: formValues.penguasaan_materi,
+              isi_laporan_ta: formValues.isi_laporan_ta,
+              struktur_penulisan: formValues.struktur_penulisan,
+              nilai_total: nilai_total,
+              catatan: formValues.catatan || null
+            }])
+            .select();
+            
+          if (error) {
+            console.error('Error submitting penilaian sempro:', error);
+            throw error;
+          }
+          
+          console.log('Created new penilaian:', data);
         }
         
-        // Get sempro data to check if all penguji have submitted penilaian
-        const { data: semproData } = await supabase
-          .from('sempros')
-          .select('id, user_id, pengajuan_ta_id')
-          .eq('id', formValues.sempro_id)
+        // Get pengajuan_ta to get pembimbing information
+        const { data: pengajuanData, error: pengajuanError } = await supabase
+          .from('pengajuan_tas')
+          .select('pembimbing_1, pembimbing_2')
+          .eq('id', semproData.pengajuan_ta_id)
           .single();
-
-        if (semproData) {
-          // Get pengajuan_ta to get pembimbing
-          const { data: pengajuanData } = await supabase
-            .from('pengajuan_tas')
-            .select('pembimbing_1, pembimbing_2')
-            .eq('id', semproData.pengajuan_ta_id)
-            .single();
-
-          // Get jadwal to get penguji
-          const { data: jadwalData } = await supabase
-            .from('jadwal_sempros')
-            .select('penguji_1, penguji_2')
-            .eq('pengajuan_ta_id', semproData.pengajuan_ta_id)
-            .eq('user_id', semproData.user_id)
-            .single();
-
-          if (pengajuanData && jadwalData) {
-            // List all involved dosen
-            const allDosens = [
-              pengajuanData.pembimbing_1,
-              pengajuanData.pembimbing_2,
-              jadwalData.penguji_1,
-              jadwalData.penguji_2
-            ];
+          
+        if (pengajuanError) {
+          console.error('Error fetching pengajuan data:', pengajuanError);
+          throw new Error('Data pengajuan tidak ditemukan');
+        }
+        
+        // Get jadwal to get penguji information
+        const { data: jadwalData, error: jadwalError } = await supabase
+          .from('jadwal_sempros')
+          .select('penguji_1, penguji_2')
+          .eq('pengajuan_ta_id', semproData.pengajuan_ta_id)
+          .eq('user_id', semproData.user_id)
+          .single();
+          
+        if (jadwalError) {
+          console.error('Error fetching jadwal data:', jadwalError);
+          throw new Error('Data jadwal tidak ditemukan');
+        }
+        
+        // List all dosen involved in this sempro
+        const allDosens = [
+          pengajuanData.pembimbing_1,
+          pengajuanData.pembimbing_2,
+          jadwalData.penguji_1,
+          jadwalData.penguji_2
+        ].filter(Boolean); // Filter out any null/undefined values
+        
+        // Check if all dosen have submitted penilaian
+        const { data: allPenilaian, error: allPenilaianError } = await supabase
+          .from('penilaian_sempros')
+          .select('user_id')
+          .eq('sempro_id', formValues.sempro_id);
+          
+        if (allPenilaianError) {
+          console.error('Error fetching all penilaian:', allPenilaianError);
+        }
+        
+        // Get list of dosen who have submitted penilaian
+        const penilaiIds = allPenilaian ? allPenilaian.map(p => p.user_id) : [];
+        
+        // Check if all required dosen have submitted penilaian
+        const allDosensHaveSubmitted = allDosens.every(dosenId => 
+          penilaiIds.includes(dosenId)
+        );
+        
+        console.log('All dosens have submitted:', allDosensHaveSubmitted);
+        console.log('Dosen list:', allDosens);
+        console.log('Penilai IDs:', penilaiIds);
+        
+        // If all dosen have submitted penilaian, update status to completed
+        if (allDosensHaveSubmitted && semproData.status !== 'completed') {
+          const { data: updateData, error: updateError } = await supabase
+            .from('sempros')
+            .update({ 
+              status: 'completed',
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', formValues.sempro_id)
+            .select();
             
-            // Check if all dosen have submitted penilaian
-            const { data: penilaianData } = await supabase
-              .from('penilaian_sempros')
-              .select('user_id')
-              .eq('sempro_id', formValues.sempro_id);
+          if (updateError) {
+            console.error('Error updating sempro status:', updateError);
+          } else {
+            console.log('Updated sempro status to completed:', updateData);
             
-            const penilaiIds = penilaianData ? penilaianData.map(p => p.user_id) : [];
-            const allDosensHaveSubmitted = allDosens.every(dosenId => 
-              penilaiIds.includes(dosenId)
-            );
+            // Add riwayat record
+            await supabase
+              .from('riwayat_pendaftaran_sempros')
+              .insert([{
+                sempro_id: formValues.sempro_id,
+                pengajuan_ta_id: semproData.pengajuan_ta_id,
+                user_id: user.id,
+                keterangan: 'Semua penilaian telah diberikan dan seminar dinyatakan selesai',
+                status: 'completed'
+              }]);
             
-            if (allDosensHaveSubmitted) {
-              // Update sempro status to completed
-              await supabase
-                .from('sempros')
-                .update({ status: 'completed' })
-                .eq('id', formValues.sempro_id);
-              
-              // Add riwayat record
-              await supabase
-                .from('riwayat_pendaftaran_sempros')
-                .insert([{
-                  sempro_id: formValues.sempro_id,
-                  pengajuan_ta_id: semproData.pengajuan_ta_id,
-                  user_id: user.id,
-                  keterangan: 'Semua penilaian telah diberikan dan seminar dinyatakan selesai',
-                  status: 'completed'
-                }]);
-              
-              // Notify student
-              await supabase
-                .from('notifikasis')
-                .insert([{
-                  from_user: user.id,
-                  to_user: semproData.user_id,
-                  judul: 'Seminar Proposal Selesai',
-                  pesan: 'Semua penilaian telah diberikan dan seminar proposal Anda dinyatakan selesai',
-                  is_read: false
-                }]);
-            }
+            // Notify student
+            await supabase
+              .from('notifikasis')
+              .insert([{
+                from_user: user.id,
+                to_user: semproData.user_id,
+                judul: 'Seminar Proposal Selesai',
+                pesan: 'Semua penilaian telah diberikan dan seminar proposal Anda dinyatakan selesai',
+                is_read: false
+              }]);
           }
         }
         
-        return data?.[0];
+        // Return success
+        return {
+          sempro_id: formValues.sempro_id,
+          user_id: user.id,
+          nilai_total: nilai_total
+        };
       } catch (error) {
         console.error('Error in penilaian sempro submission process:', error);
         throw error instanceof Error ? error : new Error(String(error));
@@ -2491,7 +2722,6 @@ export function useSubmitPenilaianSempro() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['penilaian-sempro'] });
-      queryClient.invalidateQueries({ queryKey: ['penilaian-status'] });
       queryClient.invalidateQueries({ queryKey: ['sempro'] });
       
       toast({
